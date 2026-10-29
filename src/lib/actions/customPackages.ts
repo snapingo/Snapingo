@@ -47,9 +47,6 @@ export async function saveCustomPackageAction(
 
   const { id, days, stays, startDate, endDate, leadId, customerEmail, ...data } = parsed.data;
 
-  if (data.durationDays < data.durationNights) {
-    return { error: "A trip can't have more nights than days - check the duration." };
-  }
   if (days.length === 0) {
     return { error: "Add at least one day to the itinerary." };
   }

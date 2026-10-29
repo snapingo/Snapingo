@@ -448,14 +448,25 @@ function CustomPackageFormBody({
 
   // Picking both travel dates fills Nights/Days (a 5 -> 10 Oct trip is
   // 5 nights / 6 days). Both dropdowns stay editable afterwards for the odd
-  // trip that doesn't fit that shape.
+  // trip that doesn't fit that shape; once staff set either by hand, later
+  // date changes stop overwriting it. Saved quotations start as manual so
+  // re-opening one never resets its duration.
+  const [durationManual, setDurationManual] = useState(!!defaults?.id || restoredAt !== undefined || startDirty === true);
+  const changeNights = (v: string) => {
+    setDurationManual(true);
+    setNights(v);
+  };
+  const changeDays = (v: string) => {
+    setDurationManual(true);
+    setDays(v);
+  };
   const onDatesChange = (start: string, end: string) => {
     // A new start date re-dates the itinerary: Day 1 on it, each day after
     // one date later. Changing only the end date leaves the days alone.
     if (start && start !== startDate) setDayRows((rows) => datesFromStart(rows, start));
     setStartDate(start);
     setEndDate(end);
-    if (!start || !end) return;
+    if (!start || !end || durationManual) return;
     const diff = Math.round((Date.parse(end) - Date.parse(start)) / 86_400_000);
     if (diff < 0 || diff > MAX_DURATION_NIGHTS) return;
     setNights(String(diff));
@@ -611,11 +622,11 @@ function CustomPackageFormBody({
         <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div>
             <label className={labelClass} htmlFor="durationNights">Nights</label>
-            <CustomSelect name="durationNights" required value={nights} onChange={setNights} placeholder="Select nights" options={nightOptions} />
+            <CustomSelect name="durationNights" required value={nights} onChange={changeNights} placeholder="Select nights" options={nightOptions} />
           </div>
           <div>
             <label className={labelClass} htmlFor="durationDays">Days</label>
-            <CustomSelect name="durationDays" required value={days} onChange={setDays} placeholder="Select days" options={dayOptions} />
+            <CustomSelect name="durationDays" required value={days} onChange={changeDays} placeholder="Select days" options={dayOptions} />
           </div>
         </div>
       </Section>
