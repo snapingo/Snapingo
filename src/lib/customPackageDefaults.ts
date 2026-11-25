@@ -5,6 +5,7 @@ import { resolveContentBlocks } from "@/lib/contentBlocks";
 import { getSession } from "@/lib/dal";
 import { jobRoleLabels } from "@/lib/permissions";
 import { parsePriceLines } from "@/lib/priceLines";
+import { parseOffers } from "@/lib/offers";
 import type { CustomPackageDefaults } from "@/components/admin/customPackages/CustomPackageForm";
 
 // <input type="date"> only accepts yyyy-mm-dd, and toISOString() would shift
@@ -56,6 +57,7 @@ export async function defaultsFromQuotation(quotation: QuotationWithRows): Promi
     exclusions: quotation.exclusions,
     vehicleName: quotation.vehicleName ?? undefined,
     priceLines: parsePriceLines(quotation.priceLines),
+    offers: parseOffers(quotation.offers),
     showTravellerCount: quotation.showTravellerCount,
     notes: quotation.notes ?? undefined,
     preparedByName: quotation.preparedByName ?? undefined,

@@ -1,6 +1,4 @@
 import { notFound } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { db } from "@/lib/db";
 import { requireStaffFeature } from "@/lib/dal";
 import InvoiceForm from "@/components/admin/bookings/InvoiceForm";
@@ -26,15 +24,7 @@ export default async function StaffEditInvoicePage({ params }: { params: Promise
 
   return (
     <div>
-      <Link
-        href={`/staff/bookings/${booking.id}`}
-        className="flex items-center gap-1.5 text-sm font-semibold text-ink-500 hover:text-brand-600"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Back to booking
-      </Link>
-
-      <h1 className="mt-4 font-heading text-2xl font-bold text-ink-900">
+      <h1 className="font-heading text-2xl font-bold text-ink-900">
         {invoice ? "Edit Invoice" : "Create Invoice"}
       </h1>
       <p className="mt-1 text-sm text-ink-500">

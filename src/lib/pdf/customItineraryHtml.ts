@@ -4,6 +4,7 @@ import path from "node:path";
 import type { ContentBlockView } from "@/lib/contentBlocks";
 import { parseContentBody } from "@/lib/contentBlocks";
 import { formatRupees } from "@/lib/gst";
+import { labelOffers, offerDiscount, starRating } from "@/lib/offers";
 import { priceLineAmountWithGst, rateWithGst, type PriceLine } from "@/lib/priceLines";
 import { siteConfig } from "@/lib/siteConfig";
 import { splitTravellerAges } from "@/lib/travellerAges";
@@ -68,6 +69,16 @@ export type CustomItineraryData = {
   // Per-person rates before GST; empty on quotations saved before them.
   // Printed with GST added.
   priceLines: PriceLine[];
+  // Hotel offers: alternative stays (a 3-star, a 4-star...) each with its own
+  // list and final price, printed as cards. Prices print exactly as entered.
+  offers: {
+    title: string;
+    categoryLabel: string;
+    hotels: string[];
+    note: string;
+    listPrice: number;
+    finalPrice: number;
+  }[];
   // False leaves the group size off: no Travellers/age rows, no "× N".
   showTravellerCount: boolean;
   gstPercent: number;
@@ -96,6 +107,14 @@ export type CustomItineraryContext = {
   // nobody is named.
   preparedBy: { name: string; role: string } | null;
 };
+
+// A row of gold stars for a star category ("5 Star" -> five). SVG rather than
+// a "★" character, which the embedded font may not have.
+const STAR_PATH = "12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2";
+function starsHtml(count: number, size: number): string {
+  const star = `<svg width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true"><polygon points="${STAR_PATH}" fill="#f4a300" stroke="#e08e00" stroke-width="1" stroke-linejoin="round"/></svg>`;
+  return `<span class="stars">${star.repeat(count)}</span>`;
+}
 
 // Escapes everything staff typed. This HTML is assembled by string
 // concatenation and then rendered by a real browser, so an unescaped
@@ -294,13 +313,86 @@ export async function buildCustomItineraryHtml(
          )} category hotels/resorts along the route, confirmed at the time of booking.</p>
        </section>`;
 
+  // ---- Hotel offers: one card per offer, in the same voucher look as the
+  // panel - the stay and its hotels on top, a dashed tear-off line, then the
+  // price. The discount is worked out here from the two prices, never stored.
+  const offerCards = data.offers
+    .map((offer) => {
+      const { amount, percent } = offerDiscount(offer.listPrice, offer.finalPrice);
+      const heading = offer.categoryLabel || offer.title;
+      const subheading = offer.categoryLabel && offer.title ? offer.title : "";
+      return `<article class="offer avoid-break">
+           <div class="offer-body">
+           <div class="offer-top">
+             <div class="offer-head">
+               ${(() => {
+                 const rating = starRating(offer.categoryLabel);
+                 return rating ? starsHtml(rating.stars, 14) : "";
+               })()}
+               <p class="offer-name">${esc(heading)}</p>
+               ${subheading ? `<p class="offer-sub">${esc(subheading)}</p>` : ""}
+             </div>
+             ${percent > 0 ? `<div class="offer-off"><b>${percent}%</b><span>off</span></div>` : ""}
+           </div>
+           ${
+             offer.hotels.length
+               ? `<ul class="offer-hotels">${offer.hotels.map((h) => `<li>&bull; ${esc(h)}</li>`).join("")}</ul>`
+               : ""
+           }
+           ${offer.note ? `<p class="offer-note">${esc(offer.note)}</p>` : ""}
+           </div>
+           <div class="offer-price">
+             ${amount > 0 ? `<p class="offer-was">${esc(formatRupees(offer.listPrice))}</p>` : ""}
+             <div class="offer-now-row">
+               <p class="offer-now">${esc(formatRupees(offer.finalPrice))}</p>
+               ${amount > 0 ? `<p class="offer-save">You save ${esc(formatRupees(amount))}</p>` : ""}
+             </div>
+           </div>
+         </article>`;
+    })
+    .join("");
+  const offersSection = data.offers.length
+    ? `<section class="mt-4">
+         <h2 class="box-heading">Hotel Offers</h2>
+         <div class="offers">${offerCards}</div>
+       </section>`
+    : "";
+
+  // ---- The price under the title: the total, or - when the package is
+  // priced through hotel offers - one box per offer with its package price
+  // and no total at all.
+  const offerLabels = labelOffers(data.offers);
+  const introPrice = data.offers.length
+    ? `<div class="tiers cols-${Math.min(data.offers.length, 3)}">${data.offers
+        .map((offer, i) => {
+          const rating = starRating(offerLabels[i]);
+          const pill = rating
+            ? `<span class="rating"><b>${rating.stars}</b>${starsHtml(1, 16)}</span>`
+            : `<span class="tier-text">${esc(offerLabels[i])}</span>`;
+          return `<div class="tier">
+            <div class="tier-top">
+              <span class="tier-caption">Package price</span>
+              <span class="tier-label">${pill}</span>
+            </div>
+            <p class="tier-amount">${esc(formatRupees(offer.finalPrice))}</p>
+            ${rating?.rest ? `<p class="tier-rest">${esc(rating.rest)}</p>` : ""}
+          </div>`;
+        })
+        .join("")}</div>`
+    : `<div class="price">
+        <span class="price-label">Total Price</span>
+        <span class="price-amount">${esc(formatRupees(data.totalAmount))}</span>
+      </div>`;
+
   // ---- Price breakup: what each traveller costs with GST already added,
   // adding up to the total shown at the top. No separate GST line - the
   // customer sees one all-in rate. When the head count is hidden, no per-
   // person rates are printed either (they'd give the group size away when
   // multiplied against the total): just the total price.
   const withCount = data.showTravellerCount;
-  const priceBreakup = !data.priceLines.length
+  // With hotel offers each offer carries the package price, so there is no
+  // single total to break down: the section is left out.
+  const priceBreakup = !data.priceLines.length || data.offers.length > 0
     ? ""
     : withCount
       ? `<section class="mt-4 avoid-break">
@@ -484,6 +576,23 @@ export async function buildCustomItineraryHtml(
     margin-top: 10px; display: inline-flex; align-items: baseline; gap: 12px;
     border: 1px solid ${BRAND_200}; border-radius: 12px; background: ${BRAND_50}; padding: 8px 16px;
   }
+  /* One tag per offer: the rating on a dark block, the package price beside it. */
+  .tiers { margin-top: 14px; display: grid; gap: 12px; }
+  .tiers.cols-1 { grid-template-columns: minmax(0, 260px); }
+  .tiers.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 560px; }
+  .tiers.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .tier { border: 1px solid ${BRAND_200}; border-radius: 14px; background: ${BRAND_50}; padding: 12px 14px 12px; }
+  .tier-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .tier-label { display: inline-flex; align-items: center; background: ${INK_900}; color: #fff; border-radius: 999px; padding: 4px 13px; font-size: 14px; line-height: 20px; font-weight: 800; }
+  .tier-text { white-space: nowrap; }
+  .tier-caption { font-size: 14px; line-height: 20px; font-weight: 700; color: ${INK_700}; }
+  .tier-amount { margin-top: 8px; font-size: 30px; line-height: 1.1; font-weight: 800; color: ${BRAND}; white-space: nowrap; }
+  .tier-rest { margin-top: 4px; font-size: 13px; line-height: 16px; font-weight: 600; color: ${INK_500}; }
+  .rating { display: inline-flex; align-items: center; gap: 5px; vertical-align: middle; }
+  .rating b { font-size: 19px; line-height: 1; font-weight: 800; color: #fff; }
+  .stars { display: inline-flex; gap: 3px; vertical-align: middle; }
+  .stars svg { display: block; }
+  .offer-head .stars { margin-bottom: 4px; }
   .price-label { font-size: 14px; line-height: 20px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.025em; color: ${BRAND_700}; }
   .price-amount { font-size: 24px; line-height: 1.2; font-weight: 800; color: ${BRAND}; white-space: nowrap; }
 
@@ -501,6 +610,27 @@ export async function buildCustomItineraryHtml(
   table.stays td { font-weight: 600; color: ${INK_900}; }
   table.stays tr { break-inside: avoid; }
   table.prices td:last-child, table.prices th:last-child { text-align: right; white-space: nowrap; }
+
+  /* Hotel offers: two cards across - the stay and its hotels on top, the
+     price in a grey footer below. */
+  .offers { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
+  .offer { flex: 0 1 calc(50% - 6px); display: flex; flex-direction: column; border: 1px solid ${INK_200}; border-radius: 10px; overflow: hidden; background: #fff; break-inside: avoid; }
+  .offer-body { flex: 1; padding-bottom: 14px; }
+  .offer-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 14px 14px 0; }
+  .offer-head { min-width: 0; }
+  .offer-name { font-size: 20px; line-height: 1.3; font-weight: 800; color: ${INK_900}; }
+  .offer-sub { margin-top: 2px; font-size: 14px; line-height: 20px; font-weight: 600; color: ${INK_500}; }
+  .offer-off { flex-shrink: 0; border-radius: 6px; background: ${BRAND}; color: #fff; padding: 4px 9px; font-size: 13px; line-height: 18px; font-weight: 800; white-space: nowrap; }
+  .offer-off b { font-weight: 800; }
+  .offer-off span { margin-left: 3px; font-weight: 700; }
+  .offer-hotels { list-style: none; margin: 10px 0 0; padding: 0 14px; font-size: 15px; line-height: 22px; font-weight: 600; color: ${INK_800}; }
+  .offer-hotels li { margin-top: 3px; }
+  .offer-note { margin: 8px 14px 0; font-size: 14px; line-height: 20px; color: ${INK_500}; }
+  .offer-price { border-top: 1px solid ${INK_200}; background: #faf6f9; padding: 10px 14px 12px; }
+  .offer-was { font-size: 14px; line-height: 20px; font-weight: 600; color: ${INK_400}; text-decoration: line-through; }
+  .offer-now-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .offer-now { font-size: 26px; line-height: 1.2; font-weight: 800; color: ${INK_900}; white-space: nowrap; }
+  .offer-save { font-size: 14px; line-height: 20px; font-weight: 700; color: ${EMERALD_800}; }
   table.prices tr.total td { font-size: 20px; font-weight: 800; color: ${BRAND}; }
   .note-strong { margin-top: 6px; font-size: 16px; line-height: 24px; font-weight: 700; color: ${BRAND}; }
 
@@ -597,10 +727,7 @@ export async function buildCustomItineraryHtml(
     ${data.photo ? `<img src="${data.photo}" alt="${esc(data.destinationName)}">` : ""}
     <div class="intro-text">
       <h1>${esc(data.destinationName)} Itinerary</h1>
-      <div class="price">
-        <span class="price-label">Total Price</span>
-        <span class="price-amount">${esc(formatRupees(data.totalAmount))}</span>
-      </div>
+      ${introPrice}
     </div>
   </div>
 
@@ -609,6 +736,8 @@ export async function buildCustomItineraryHtml(
   ${priceBreakup}
 
   ${stays}
+
+  ${offersSection}
 
   ${vehicle}
 

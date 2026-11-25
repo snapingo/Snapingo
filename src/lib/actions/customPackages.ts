@@ -71,8 +71,12 @@ export async function saveCustomPackageAction(
     return { error: "Add at least one day to the itinerary." };
   }
   const price = priceLinesTotal(data.priceLines);
-  if (price <= 0) {
-    return { error: "Enter the per-person rate for at least one traveller type under Pricing." };
+  // A package priced through its hotel offers needs no per-person rates: each
+  // offer carries the package price.
+  if (price <= 0 && data.offers.length === 0) {
+    return {
+      error: "Enter the per-person rate for at least one traveller type under Pricing, or add a hotel offer with a price.",
+    };
   }
   // Checked up front so a deleted lead gives a clear message, not a failed
   // save with the quotation half-written.

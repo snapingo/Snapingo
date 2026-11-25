@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { contentBlocksField } from "@/lib/validation/contentBlocks";
 import { parsePriceLines } from "@/lib/priceLines";
+import { parseOffers, validateOffers } from "@/lib/offers";
 
 const linesToArray = (v: unknown) =>
   typeof v === "string" ? v.split("\n").map((s) => s.trim()).filter(Boolean) : [];
@@ -90,6 +91,27 @@ export const customPackageSchema = z.object({
   // price is these rows' sum and GST is computed server-side from the
   // configured rate, so a crafted request can't understate either.
   priceLines: jsonRows.transform(parsePriceLines),
+  // Hotel offers (a 3-star, a 4-star, a 5-star option...) as one JSON string
+  // from the form. A mistake is reported to the person filling the form
+  // rather than quietly dropping the offer.
+  offers: z
+    .string()
+    .optional()
+    .transform((value, ctx) => {
+      let rows: unknown = [];
+      try {
+        rows = value ? JSON.parse(value) : [];
+      } catch {
+        ctx.addIssue({ code: "custom", message: "Invalid offers data." });
+        return z.NEVER;
+      }
+      const problem = validateOffers(rows);
+      if (problem) {
+        ctx.addIssue({ code: "custom", message: problem });
+        return z.NEVER;
+      }
+      return parseOffers(rows);
+    }),
   // "false" from the form's Yes/No; anything else (including a form that
   // predates the question) keeps the default of printing the count.
   showTravellerCount: z

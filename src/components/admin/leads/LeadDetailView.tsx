@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, CalendarPlus, Download, FileText, Users } from "lucide-react";
+import { CalendarPlus, Download, FileText, Users } from "lucide-react";
 import { db } from "@/lib/db";
 import { canUseStaffFeature, getSession } from "@/lib/dal";
 import { getActiveMasterList } from "@/lib/masterData";
 import { packagePositions } from "@/lib/tripPackages";
+import { packageAmountText, parseOffers } from "@/lib/offers";
 import {
   noteStatusLabels,
   noteStatusTextStyles,
@@ -48,7 +49,15 @@ export default async function LeadDetailView({ basePath, leadId }: { basePath: s
         customPackages: {
           where: { deletedAt: null },
           orderBy: { createdAt: "desc" },
-          select: { id: true, tripId: true, packageNumber: true, destinationName: true, totalAmount: true, createdAt: true },
+          select: {
+            id: true,
+            tripId: true,
+            packageNumber: true,
+            destinationName: true,
+            totalAmount: true,
+            offers: true,
+            createdAt: true,
+          },
         },
       },
     }),
@@ -101,12 +110,7 @@ export default async function LeadDetailView({ basePath, leadId }: { basePath: s
 
   return (
     <div>
-      <Link href={basePath} className="flex items-center gap-1.5 text-sm font-semibold text-ink-500 hover:text-brand-600">
-        <ArrowLeft className="h-4 w-4" />
-        Back to leads
-      </Link>
-
-      <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="font-heading text-2xl font-bold text-ink-900">
             {lead.name || lead.phone || lead.email || "Anonymous lead"}
@@ -195,7 +199,7 @@ export default async function LeadDetailView({ basePath, leadId }: { basePath: s
                     )}
                   </Link>
                   <p className="text-xs text-ink-500">
-                    {quotation.destinationName} · ₹{quotation.totalAmount.toLocaleString("en-IN")} ·{" "}
+                    {quotation.destinationName} · {packageAmountText(quotation.totalAmount, parseOffers(quotation.offers))} ·{" "}
                     {fmtDate(quotation.createdAt)}
                   </p>
                 </div>

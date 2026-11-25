@@ -17,6 +17,7 @@ import CustomSelect from "@/components/CustomSelect";
 import { dayOptions, MAX_DURATION_NIGHTS, nightOptions } from "@/lib/durationHelpers";
 import { formatRupees } from "@/lib/gst";
 import SuggestInput from "@/components/admin/SuggestInput";
+import OffersEditor, { type OfferRow } from "@/components/admin/customPackages/OffersEditor";
 import ItineraryDays, { datesFromStart, type DayRow } from "@/components/admin/customPackages/ItineraryDays";
 import ContentBlocksEditor, { type EditableContentBlock } from "@/components/admin/ContentBlocksEditor";
 import FormSection from "@/components/admin/FormSection";
@@ -110,6 +111,15 @@ export type CustomPackageDefaults = {
   vehicleName?: string;
   // Per-person breakup; numbers from a saved quotation, strings from a draft.
   priceLines?: { label: string; count: number | string; rate: number | string }[];
+  // Hotel offers; numbers from a saved quotation, strings from a draft.
+  offers?: {
+    title: string;
+    hotelCategory: string;
+    hotels: string[];
+    note: string;
+    listPrice: number | string;
+    finalPrice: number | string;
+  }[];
   showTravellerCount?: boolean;
   // A quotation saved before the breakup existed: its old total, shown as a
   // reminder while its per-person rates are entered.
@@ -215,6 +225,7 @@ function formToDefaults(form: HTMLFormElement): CustomPackageDefaults {
     customInclusions: (str("customInclusions") ?? "").split("\n").filter(Boolean),
     exclusions: (str("exclusions") ?? "").split("\n").filter(Boolean),
     priceLines: rows("priceLines") as CustomPackageDefaults["priceLines"],
+    offers: rows("offers") as unknown as CustomPackageDefaults["offers"],
     notes: str("notes"),
     preparedByName: str("preparedByName"),
     preparedByRole: str("preparedByRole"),
@@ -478,6 +489,17 @@ function CustomPackageFormBody({
     setNights(String(diff));
     setDays(String(diff + 1));
   };
+  // Hotel offers, held here (not in the editor) so they are part of the draft.
+  const [offerRows, setOfferRows] = useState<OfferRow[]>(() =>
+    (defaults?.offers ?? []).map((o) => ({
+      title: o.title ?? "",
+      hotelCategory: o.hotelCategory ?? "",
+      hotels: o.hotels?.length ? o.hotels.map(String) : [""],
+      note: o.note ?? "",
+      listPrice: o.listPrice ? String(o.listPrice) : "",
+      finalPrice: o.finalPrice ? String(o.finalPrice) : "",
+    }))
+  );
   const [roomCategory, setRoomCategory] = useState(defaults?.roomCategory ?? "");
   const [hotelCategory, setHotelCategory] = useState(defaults?.hotelCategory ?? "");
 
@@ -801,10 +823,28 @@ function CustomPackageFormBody({
             ]}
           />
         </div>
+
+        <div className="mt-8 border-t border-ink-100 pt-6">
+          <OffersEditor
+            rows={offerRows}
+            onChange={setOfferRows}
+            hotelCategories={hotelCategories}
+            hotelSuggestions={hotelSuggestions}
+          />
+        </div>
       </Section>
 
       <Section title="Itinerary">
-        <ItineraryDays rows={dayRows} onChange={setDayRows} startDate={startDate} />
+        <ItineraryDays
+          rows={dayRows}
+          onChange={(rows) => {
+            // A drag or an arrow-key move raises no click or input event, so
+            // the draft is told about the change here.
+            dirty.current = true;
+            setDayRows(rows);
+          }}
+          startDate={startDate}
+        />
       </Section>
 
       <Section title="Inclusions">

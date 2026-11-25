@@ -3,8 +3,9 @@ import { Download, FileText, Plus } from "lucide-react";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/dal";
 import { canEditCustomPackage } from "@/lib/customPackageAccess";
-import { formatRupees } from "@/lib/gst";
+
 import { packagePositions } from "@/lib/tripPackages";
+import { packageAmountText, parseOffers } from "@/lib/offers";
 import DeleteButton from "@/components/admin/cms/DeleteButton";
 import { deleteCustomPackageAction, restoreCustomPackageAction } from "@/lib/actions/customPackages";
 import Pagination, { PAGE_SIZE } from "@/components/admin/Pagination";
@@ -159,7 +160,7 @@ export default async function CustomPackagesListPage({
                   </p>
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 font-semibold text-ink-900">
-                  {formatRupees(quotation.totalAmount)}
+                  {packageAmountText(quotation.totalAmount, parseOffers(quotation.offers))}
                 </td>
                 {/* nowrap: with long customer names in the All view the table
                     squeezed this column and split the staff name over lines. */}

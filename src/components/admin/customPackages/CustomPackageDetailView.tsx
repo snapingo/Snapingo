@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, CalendarCheck, CalendarPlus, Download, Pencil } from "lucide-react";
+import { CalendarCheck, CalendarPlus, Download, Pencil } from "lucide-react";
 import { db } from "@/lib/db";
 import { canUseStaffFeature, getSession } from "@/lib/dal";
 import { canEditCustomPackage } from "@/lib/customPackageAccess";
 import RestoreButton from "@/components/admin/RestoreButton";
 import AddPackageButton from "@/components/admin/customPackages/AddPackageButton";
 import DeletePackageButton from "@/components/admin/customPackages/DeletePackageButton";
+import OfferCard from "@/components/admin/customPackages/OfferCard";
+import { packageAmountText, parseOffers } from "@/lib/offers";
 import { MAX_PACKAGES_PER_TRIP, packageLabel } from "@/lib/tripPackages";
 import { restoreCustomPackageAction } from "@/lib/actions/customPackages";
 import { formatRupees } from "@/lib/gst";
@@ -71,7 +73,7 @@ export default async function CustomPackageDetailView({
   const tripPackages = await db.customPackage.findMany({
     where: { tripId: quotation.tripId, deletedAt: null },
     orderBy: { packageNumber: "asc" },
-    select: { id: true, packageNumber: true, destinationName: true, totalAmount: true },
+    select: { id: true, packageNumber: true, destinationName: true, totalAmount: true, offers: true },
   });
   const canAddToTrip = canEdit && !quotation.deletedAt;
 
@@ -85,6 +87,7 @@ export default async function CustomPackageDetailView({
   );
   const exclusions = getEffectiveExclusions(quotation.exclusions, quotation.inclusions, inclusionOptions);
   const priceLines = parsePriceLines(quotation.priceLines);
+  const offers = parseOffers(quotation.offers);
 
   const facts: [string, string][] = [
     ["Customer", quotation.customerName],
@@ -137,15 +140,7 @@ export default async function CustomPackageDetailView({
 
   return (
     <div>
-      <Link
-        href={`${basePath}/custom-packages`}
-        className="flex items-center gap-1.5 text-sm font-semibold text-ink-500 hover:text-brand-600"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Back to customized packages
-      </Link>
-
-      <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="font-heading text-2xl font-bold text-ink-900">
             {quotation.destinationName}
@@ -262,7 +257,7 @@ export default async function CustomPackageDetailView({
                     <span className={`block truncate text-sm font-semibold ${current ? "text-ink-900" : "text-ink-700"}`}>
                       {p.destinationName}
                     </span>
-                    <span className="block text-xs text-ink-500">₹{p.totalAmount.toLocaleString("en-IN")}</span>
+                    <span className="block text-xs text-ink-500">{packageAmountText(p.totalAmount, parseOffers(p.offers))}</span>
                   </span>
                 </Link>
               );
@@ -329,6 +324,24 @@ export default async function CustomPackageDetailView({
           </Section>
         )}
 
+        {offers.length > 0 && (
+          <Section title="Hotel offers">
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+              {offers.map((offer, i) => (
+                <OfferCard
+                  key={i}
+                  categoryLabel={offer.hotelCategory ? hotelLabels.get(offer.hotelCategory) ?? "" : ""}
+                  title={offer.title}
+                  hotels={offer.hotels}
+                  note={offer.note}
+                  listPrice={offer.listPrice}
+                  finalPrice={offer.finalPrice}
+                />
+              ))}
+            </div>
+          </Section>
+        )}
+
         <Section title="Itinerary">
           <ol className="space-y-4">
             {quotation.days.map((day) => (
@@ -365,6 +378,12 @@ export default async function CustomPackageDetailView({
         </div>
 
         <Section title="Pricing">
+          {quotation.totalAmount === 0 && offers.length > 0 ? (
+            <p className="max-w-md text-sm text-ink-500">
+              This package is priced through its hotel offers above: each offer carries the package price, so there is no
+              single total.
+            </p>
+          ) : (
           <dl className="max-w-md space-y-2 text-sm">
             {priceLines.map((line, i) => (
               <div key={i} className="flex justify-between gap-4">
@@ -387,6 +406,7 @@ export default async function CustomPackageDetailView({
               <dd className="text-brand-600">{formatRupees(quotation.totalAmount)}</dd>
             </div>
           </dl>
+          )}
         </Section>
 
         {quotation.notes && (

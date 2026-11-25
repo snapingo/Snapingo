@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { requireStaffFeature } from "@/lib/dal";
 import { isEmailConfigured, looksLikeEmail, sendEmail } from "@/lib/email";
 import { itineraryEmail } from "@/lib/emailTemplates";
+import { labelOffers } from "@/lib/offers";
 import { loadCustomItinerary } from "@/lib/pdf/customItineraryData";
 import { buildCustomItineraryHtml } from "@/lib/pdf/customItineraryHtml";
 import { renderPdfFromHtml } from "@/lib/pdf/renderPdf";
@@ -68,6 +69,10 @@ export async function sendItineraryEmailAction(
     destinationName: loaded.data.destinationName,
     travelWindow: travelWindow(loaded.data.startDate, loaded.data.endDate),
     totalAmount: loaded.data.totalAmount,
+    offerPrices: labelOffers(loaded.data.offers).map((label, i) => ({
+      label,
+      amount: loaded.data.offers[i].finalPrice,
+    })),
     senderName: await senderName(session.userId),
     note: parsed.data.note,
   });

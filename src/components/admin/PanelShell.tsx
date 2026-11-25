@@ -6,6 +6,7 @@ import PanelNav from "@/components/admin/PanelNav";
 import DesktopOnlyBrandBar from "@/components/admin/DesktopOnlyBrandBar";
 import AutoRefresh from "@/components/admin/AutoRefresh";
 import FormDraftKeeper from "@/components/admin/FormDraftKeeper";
+import PanelBackButton from "@/components/admin/PanelBackButton";
 import NotificationBell from "@/components/admin/NotificationBell";
 import { NotificationProvider } from "@/components/admin/NotificationCenter";
 import { UploadsProvider } from "@/components/admin/UploadsProvider";
@@ -102,7 +103,10 @@ export default function PanelShell({
               it they resolve against the page itself, and one far down a long
               form stretches the document - a second scrollbar and a blank
               band below the h-screen panel. */}
-          <main className="relative flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 print:h-auto print:overflow-visible">{children}</main>
+          <main className="relative flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 print:h-auto print:overflow-visible">
+            <PanelBackButton />
+            {children}
+          </main>
         </div>
 
         <div className="print-hide relative flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center lg:hidden">

@@ -28,6 +28,7 @@ function makeData(overrides: Partial<CustomItineraryData> = {}): CustomItinerary
     vehicleName: "Innova Crysta",
     price: 60000,
     priceLines: [],
+    offers: [],
     showTravellerCount: true,
     gstPercent: 5,
     gstAmount: 3000,
@@ -122,6 +123,102 @@ describe("buildCustomItineraryHtml", () => {
     expect(html).not.toContain("&times; 2");
     expect(html).not.toContain("2 Adults");
     expect(html).not.toContain("Child Ages");
+  });
+
+  // Hotel offers print in the same single PDF, each as a card with the
+  // discount worked out from its two prices.
+  it("prints hotel offers with the discount worked out", async () => {
+    const html = await buildCustomItineraryHtml(
+      makeData({
+        offers: [
+          { title: "Hill view", categoryLabel: "3 Star", hotels: ["Hotel A", "Hotel B"], note: "Breakfast included", listPrice: 45000, finalPrice: 36900 },
+          { title: "", categoryLabel: "5 Star", hotels: ["Hotel C"], note: "", listPrice: 0, finalPrice: 80000 },
+        ],
+      }),
+      context
+    );
+    expect(html).toContain("Hotel Offers");
+    expect(html).toContain("3 Star");
+    expect(html).toContain("Hill view");
+    expect(html).toContain("Hotel A");
+    expect(html).toContain("Breakfast included");
+    // 45,000 -> 36,900 is 18% off, saving 8,100.
+    expect(html).toContain("₹45,000");
+    expect(html).toContain("₹36,900");
+    expect(html).toContain("18%");
+    expect(html).toContain("You save ₹8,100");
+    // An offer without a list price shows its price and no discount.
+    expect(html).toContain("₹80,000");
+    expect(html.match(/class="offer-off"/g)).toHaveLength(1);
+    expect(html.match(/class="offer-was"/g)).toHaveLength(1);
+  });
+
+  // The offers carry the package price, so there is no single total to show.
+  it("shows each offer price instead of a total when there are offers", async () => {
+    const html = await buildCustomItineraryHtml(
+      makeData({
+        priceLines: [{ label: "Adult", count: 2, rate: 25000 }],
+        offers: [
+          { title: "", categoryLabel: "4 Star", hotels: ["Hotel A"], note: "", listPrice: 0, finalPrice: 35000 },
+          { title: "", categoryLabel: "5 Star", hotels: ["Hotel B"], note: "", listPrice: 0, finalPrice: 50000 },
+        ],
+      }),
+      context
+    );
+    // One price box per offer under the title...
+    expect(html.match(/class="tier-label"/g)).toHaveLength(2);
+    // "Package price" is written above each price.
+    expect(html.match(/class="tier-caption">Package price/g)).toHaveLength(2);
+    expect(html).toContain("₹35,000");
+    expect(html).toContain("₹50,000");
+    // ...and no total anywhere: not in the banner, not in a breakup.
+    expect(html).not.toContain("Total Price");
+    expect(html).not.toContain("Price Breakup");
+    expect(html).not.toContain("Rate / Person");
+    expect(html).not.toContain("₹63,000");
+  });
+
+  // A star category gets that many gold stars, in the price box and on its card.
+  it("shows the star count in the price box and one star per star on the card", async () => {
+    const html = await buildCustomItineraryHtml(
+      makeData({
+        offers: [
+          { title: "", categoryLabel: "4 Star", hotels: ["Hotel A"], note: "", listPrice: 0, finalPrice: 35000 },
+          { title: "", categoryLabel: "5 Star", hotels: ["Hotel B"], note: "", listPrice: 0, finalPrice: 50000 },
+          { title: "", categoryLabel: "Budget", hotels: ["Hotel C"], note: "", listPrice: 0, finalPrice: 20000 },
+        ],
+      }),
+      context
+    );
+    // The price boxes read "4 ★" and "5 ★" (one star each); the cards draw (4 + 5) stars.
+    // "Budget" has none.
+    expect(html.match(/<polygon/g)).toHaveLength(2 + 9);
+    expect(html).toContain('<span class="rating"><b>5</b>');
+    expect(html).toContain('<span class="rating"><b>4</b>');
+    expect(html).toContain("Budget");
+  });
+
+  it("still shows the total when there are no offers", async () => {
+    const html = await buildCustomItineraryHtml(makeData({ offers: [] }), context);
+    expect(html).toContain("Total Price");
+    expect(html).toContain("₹63,000");
+  });
+
+  it("leaves the offers section out when there are none", async () => {
+    const html = await buildCustomItineraryHtml(makeData({ offers: [] }), context);
+    expect(html).not.toContain("Hotel Offers");
+    expect(html).not.toContain('class="offers"');
+  });
+
+  it("escapes what staff typed into an offer", async () => {
+    const html = await buildCustomItineraryHtml(
+      makeData({
+        offers: [{ title: "<b>x</b>", categoryLabel: "", hotels: ["<script>alert(1)</script>"], note: "", listPrice: 0, finalPrice: 5000 }],
+      }),
+      context
+    );
+    expect(html).not.toContain("<script>alert(1)</script>");
+    expect(html).toContain("&lt;script&gt;");
   });
 
   // The quotation is a customer-facing document assembled by string

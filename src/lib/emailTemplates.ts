@@ -73,6 +73,9 @@ export function itineraryEmail(input: {
   destinationName: string;
   travelWindow: string;
   totalAmount: number;
+  // A package priced through hotel offers: each offer's price replaces the
+  // total, which it doesn't have.
+  offerPrices?: { label: string; amount: number }[];
   senderName: string;
   note?: string;
 }): { subject: string; html: string } {
@@ -89,7 +92,9 @@ export function itineraryEmail(input: {
         ["Trip ID", input.tripId],
         ["Destination", input.destinationName],
         ["Travel dates", input.travelWindow],
-        ["Total", formatRupees(input.totalAmount)],
+        ...(input.offerPrices?.length
+          ? input.offerPrices.map((o): [string, string] => [o.label, formatRupees(o.amount)])
+          : ([["Total", formatRupees(input.totalAmount)]] as [string, string][])),
       ]),
       input.note ? paragraphs([esc(input.note).replace(/\n/g, "<br>")]) : "",
       paragraphs([

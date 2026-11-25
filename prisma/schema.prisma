@@ -538,6 +538,13 @@ model CustomPackage {
   // before the breakup existed - those print their total alone.
   priceLines Json?
 
+  // Hotel offers shown alongside the itinerary, e.g. a 3-star, a 4-star and a
+  // 5-star option: [{ title, hotelCategory, hotels[], note, listPrice,
+  // finalPrice }] (see src/lib/offers.ts). They are alternatives for the
+  // customer to choose from and never feed the package price above. Null on
+  // quotations saved before offers existed.
+  offers Json?
+
   // Whether the PDF prints how many people are travelling (the Travellers
   // and age rows, and "× N" in the price breakup). Some customers are quoted
   // per person without the group size on the document.

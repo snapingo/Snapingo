@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Pencil, Receipt } from "lucide-react";
+import { Pencil, Receipt } from "lucide-react";
 import { db } from "@/lib/db";
 import DeleteBookingButton from "@/components/admin/bookings/DeleteBookingButton";
 import { addPaymentAction, restoreBookingAction, updatePaymentAction } from "@/lib/actions/bookings";
@@ -49,12 +49,7 @@ export default async function BookingDetailView({ bookingId, basePath = "/admin"
 
   return (
     <div>
-      <Link href={`${basePath}/bookings`} className="flex items-center gap-1.5 text-sm font-semibold text-ink-500 hover:text-brand-600">
-        <ArrowLeft className="h-4 w-4" />
-        Back to bookings
-      </Link>
-
-      <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="font-heading text-2xl font-bold text-ink-900">{booking.travelerName}</h1>
           <p className="mt-1 text-sm text-ink-500">
