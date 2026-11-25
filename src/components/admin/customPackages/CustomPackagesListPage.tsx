@@ -5,7 +5,7 @@ import { getSession } from "@/lib/dal";
 import { canEditCustomPackage } from "@/lib/customPackageAccess";
 
 import { packagePositions } from "@/lib/tripPackages";
-import { packageAmountText, parseOffers } from "@/lib/offers";
+import { offersWithGst, packageAmountText, parseOffers } from "@/lib/offers";
 import DeleteButton from "@/components/admin/cms/DeleteButton";
 import { deleteCustomPackageAction, restoreCustomPackageAction } from "@/lib/actions/customPackages";
 import Pagination, { PAGE_SIZE } from "@/components/admin/Pagination";
@@ -143,8 +143,8 @@ export default async function CustomPackagesListPage({
                     {quotation.tripId}
                   </Link>
                   {(positions.get(quotation.id) ?? 1) > 1 && (
-                    <span className="relative ml-2 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-bold text-brand-700">
-                      #{positions.get(quotation.id)}
+                    <span className="relative ml-2 whitespace-nowrap text-xs font-semibold text-ink-500">
+                      Package {positions.get(quotation.id)}
                     </span>
                   )}
                 </td>
@@ -160,7 +160,7 @@ export default async function CustomPackagesListPage({
                   </p>
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 font-semibold text-ink-900">
-                  {packageAmountText(quotation.totalAmount, parseOffers(quotation.offers))}
+                  {packageAmountText(quotation.totalAmount, offersWithGst(parseOffers(quotation.offers), quotation.gstPercent))}
                 </td>
                 {/* nowrap: with long customer names in the All view the table
                     squeezed this column and split the staff name over lines. */}

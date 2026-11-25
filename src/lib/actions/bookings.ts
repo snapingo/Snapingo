@@ -193,6 +193,26 @@ export async function addPaymentAction(bookingId: string, formData: FormData): P
   revalidateBookingPaths(bookingId);
 }
 
+/**
+ * Removes a recorded payment (one entered by mistake). The booking's paid
+ * total and balance are worked out from its payments, so they follow.
+ * Payments have no archive: this is permanent, which the panel says before
+ * it asks to confirm.
+ */
+export async function deletePaymentAction(paymentId: string): Promise<void> {
+  await requireStaffFeature("bookings");
+
+  const payment = await db.payment.findUnique({
+    where: { id: paymentId },
+    select: { bookingId: true, booking: { select: { deletedAt: true } } },
+  });
+  // An archived ("deleted") booking is read-only until restored.
+  if (!payment || payment.booking.deletedAt) return;
+
+  await db.payment.delete({ where: { id: paymentId } });
+  revalidateBookingPaths(payment.bookingId);
+}
+
 /** Corrects a recorded payment (amount, mode, received date, notes). */
 export async function updatePaymentAction(paymentId: string, formData: FormData): Promise<void> {
   await requireStaffFeature("bookings");

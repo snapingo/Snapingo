@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { Pencil } from "lucide-react";
+import { useState, useTransition } from "react";
+import { Pencil, Trash2 } from "lucide-react";
 import FormSelect from "@/components/admin/FormSelect";
+import ConfirmModal from "@/components/admin/ConfirmModal";
 import { usePaymentEditing } from "@/components/admin/bookings/PaymentEditContext";
 
 const inputClass =
@@ -10,7 +11,8 @@ const inputClass =
 
 /**
  * One recorded payment. "Edit" swaps it for a small form so a wrong amount,
- * mode or received date can be corrected in place.
+ * mode or received date can be corrected in place; the bin removes a payment
+ * that should never have been recorded (after a confirmation).
  */
 export default function PaymentItem({
   amount,
@@ -22,6 +24,7 @@ export default function PaymentItem({
   modes,
   canEdit,
   action,
+  deleteAction,
 }: {
   amount: number;
   mode: string;
@@ -32,8 +35,11 @@ export default function PaymentItem({
   modes: string[];
   canEdit: boolean;
   action: (formData: FormData) => Promise<void>;
+  deleteAction: () => Promise<void>;
 }) {
   const [editing, setEditingLocal] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, startDelete] = useTransition();
   const { setEditing: setPanelEditing } = usePaymentEditing();
   const setEditing = (v: boolean) => {
     setEditingLocal(v);
@@ -92,12 +98,36 @@ export default function PaymentItem({
               <Pencil className="h-3.5 w-3.5" />
             </button>
           )}
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => setConfirmDelete(true)}
+              disabled={deleting}
+              aria-label="Delete payment"
+              className="-ml-1 rounded-full p-1 text-ink-500 transition hover:bg-white hover:text-red-600 disabled:opacity-50"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
       </div>
       <p className="mt-0.5 text-xs text-ink-500">
         {mode} · recorded by {recordedBy}
       </p>
       {notes && <p className="mt-1 text-xs text-ink-700">{notes}</p>}
+      <ConfirmModal
+        open={confirmDelete}
+        title="Delete payment"
+        message={`Delete the ₹${amount.toLocaleString("en-IN")} payment received on ${paidAtLabel}? It is removed from this booking and the balance is updated. This can't be undone.`}
+        pending={deleting}
+        onCancel={() => setConfirmDelete(false)}
+        onConfirm={() =>
+          startDelete(async () => {
+            await deleteAction();
+            setConfirmDelete(false);
+          })
+        }
+      />
     </div>
   );
 }

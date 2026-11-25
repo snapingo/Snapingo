@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { Pencil, Receipt } from "lucide-react";
 import { db } from "@/lib/db";
 import DeleteBookingButton from "@/components/admin/bookings/DeleteBookingButton";
-import { addPaymentAction, restoreBookingAction, updatePaymentAction } from "@/lib/actions/bookings";
+import { addPaymentAction, deletePaymentAction, restoreBookingAction, updatePaymentAction } from "@/lib/actions/bookings";
 import PaymentItem from "@/components/admin/bookings/PaymentItem";
 import AddPaymentToggle from "@/components/admin/bookings/AddPaymentToggle";
 import { HideWhileEditing, PaymentEditProvider } from "@/components/admin/bookings/PaymentEditContext";
@@ -164,6 +164,7 @@ export default async function BookingDetailView({ bookingId, basePath = "/admin"
                 modes={PAYMENT_MODES}
                 canEdit={!archived}
                 action={updatePaymentAction.bind(null, p.id)}
+                deleteAction={deletePaymentAction.bind(null, p.id)}
               />
             ))}
             {booking.payments.length === 0 && <p className="text-sm text-ink-500">No payments recorded yet.</p>}

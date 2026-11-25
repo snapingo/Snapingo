@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { canUseStaffFeature, getSession } from "@/lib/dal";
 import { getActiveMasterList } from "@/lib/masterData";
 import { packagePositions } from "@/lib/tripPackages";
-import { packageAmountText, parseOffers } from "@/lib/offers";
+import { offersWithGst, packageAmountText, parseOffers } from "@/lib/offers";
 import {
   noteStatusLabels,
   noteStatusTextStyles,
@@ -55,6 +55,7 @@ export default async function LeadDetailView({ basePath, leadId }: { basePath: s
             packageNumber: true,
             destinationName: true,
             totalAmount: true,
+            gstPercent: true,
             offers: true,
             createdAt: true,
           },
@@ -193,13 +194,13 @@ export default async function LeadDetailView({ basePath, leadId }: { basePath: s
                   >
                     {quotation.tripId}
                     {(packagePositionById.get(quotation.id) ?? 1) > 1 && (
-                      <span className="ml-2 rounded-full bg-brand-50 px-2 py-0.5 font-sans text-[11px] font-bold text-brand-700">
+                      <span className="ml-2 font-sans text-[11px] font-semibold text-ink-500">
                         Package {packagePositionById.get(quotation.id)}
                       </span>
                     )}
                   </Link>
                   <p className="text-xs text-ink-500">
-                    {quotation.destinationName} · {packageAmountText(quotation.totalAmount, parseOffers(quotation.offers))} ·{" "}
+                    {quotation.destinationName} · {packageAmountText(quotation.totalAmount, offersWithGst(parseOffers(quotation.offers), quotation.gstPercent))} ·{" "}
                     {fmtDate(quotation.createdAt)}
                   </p>
                 </div>

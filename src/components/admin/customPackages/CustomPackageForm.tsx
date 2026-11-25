@@ -14,10 +14,10 @@ import { useRouter } from "next/navigation";
 import { saveCustomPackageAction, type FormState } from "@/lib/actions/customPackages";
 import RepeatableRows from "@/components/admin/cms/RepeatableRows";
 import CustomSelect from "@/components/CustomSelect";
-import { dayOptions, MAX_DURATION_NIGHTS, nightOptions } from "@/lib/durationHelpers";
+import { dayOptions, daysForNights, nightOptions, nightsBetween, nightsForDays } from "@/lib/durationHelpers";
 import { formatRupees } from "@/lib/gst";
 import SuggestInput from "@/components/admin/SuggestInput";
-import OffersEditor, { type OfferRow } from "@/components/admin/customPackages/OffersEditor";
+import OffersEditor, { type OfferPriceRow, type OfferRow } from "@/components/admin/customPackages/OffersEditor";
 import ItineraryDays, { datesFromStart, type DayRow } from "@/components/admin/customPackages/ItineraryDays";
 import ContentBlocksEditor, { type EditableContentBlock } from "@/components/admin/ContentBlocksEditor";
 import FormSection from "@/components/admin/FormSection";
@@ -40,7 +40,7 @@ const inputClass =
 const labelClass = "mb-1.5 block text-xs font-bold uppercase tracking-wide text-ink-900";
 const readOnlyClass = "cursor-not-allowed bg-ink-50 text-ink-500";
 // Shared by the price table's header and rows so the columns line up.
-const PRICE_ROW_GRID = "grid grid-cols-[minmax(0,1fr)_96px_150px_120px_32px] items-center gap-3";
+const PRICE_ROW_GRID = "grid grid-cols-[minmax(0,1fr)_92px_148px_128px_32px] items-center gap-x-6 gap-y-3";
 
 export type Option = { value: string; label: string; freeText?: boolean };
 
@@ -54,6 +54,48 @@ const ageOptionsFor = (ages: string[], current: string | undefined): Option[] =>
   const options = ages.map((a) => ({ value: a, label: a }));
   return current && !ages.includes(current) ? [{ value: current, label: current }, ...options] : options;
 };
+
+/**
+ * An offer's per-person rows as the form holds them. An offer saved before
+ * offers had rates has only a total: it becomes one Adult row per traveller
+ * (the package's), each paying an even share, so nothing already entered is lost.
+ */
+function offerPriceRows(
+  o: NonNullable<CustomPackageDefaults["offers"]>[number],
+  packageAdults: number,
+  packageChildren: number
+): OfferPriceRow[] {
+  const finalTotal = Number(o.finalPrice) || 0;
+  const listTotal = Number(o.listPrice) || 0;
+  const saved = o.priceLines ?? [];
+  // An offer saved before list rates existed has one list total: spread over
+  // the rows in proportion to their final rates, so its discount is unchanged.
+  const spread = saved.reduce((sum, l) => sum + (Number(l.count) || 0) * (Number(l.rate) || 0), 0);
+  if (saved.length > 0) {
+    const hasListRates = saved.some((l) => Number(l.listRate) > 0);
+    return saved.map((l) => ({
+      label: l.label,
+      count: String(l.count),
+      rate: String(l.rate),
+      listRate:
+        Number(l.listRate) > 0
+          ? String(l.listRate)
+          : !hasListRates && listTotal > 0 && spread > 0 && Number(l.rate) > 0
+            ? String(Math.round((Number(l.rate) * listTotal) / spread))
+            : "",
+    }));
+  }
+  // An offer saved as a single total: one row per traveller of the package.
+  const travellers = Math.max(1, packageAdults + packageChildren);
+  return [
+    {
+      label: "Adult",
+      count: String(travellers),
+      rate: finalTotal > 0 ? String(Math.round(finalTotal / travellers)) : "",
+      listRate: listTotal > 0 ? String(Math.round(listTotal / travellers)) : "",
+    },
+  ];
+}
 
 const countOf = (value: string) => Math.min(MAX_AGE_ROWS, Math.max(0, Math.floor(Number(value) || 0)));
 
@@ -119,6 +161,9 @@ export type CustomPackageDefaults = {
     note: string;
     listPrice: number | string;
     finalPrice: number | string;
+    // Who is travelling and what each kind pays per person.
+    priceLines?: { label: string; count: number | string; rate: number | string; listRate?: number | string }[];
+    showTravellers?: boolean | string;
   }[];
   showTravellerCount?: boolean;
   // A quotation saved before the breakup existed: its old total, shown as a
@@ -470,24 +515,35 @@ function CustomPackageFormBody({
   const [nights, setNights] = useState(String(defaults?.durationNights ?? ""));
   const [days, setDays] = useState(String(defaults?.durationDays ?? ""));
 
-  // Picking or changing the travel dates always refills Nights/Days (a
-  // 5 -> 10 Oct trip is 5 nights / 6 days). Both dropdowns stay editable for
-  // the odd trip that doesn't fit that shape, but the next date change
-  // recalculates them from the dates again. Merely re-opening a saved
-  // quotation changes nothing - only editing a date does.
-  const changeNights = (v: string) => setNights(v);
-  const changeDays = (v: string) => setDays(v);
+  // Nights and Days follow the travel dates (5 -> 10 Oct is 5 nights / 6 days)
+  // whenever both dates are set - they are shown from the dates and can't be
+  // changed by hand, so they never disagree with them (even on a package saved
+  // with a mismatch). Without both dates they are chosen by hand, and then go
+  // together: N nights is N + 1 days, so choosing one sets the other.
+  const datesNights = nightsBetween(startDate, endDate);
+  const lockedToDates = datesNights !== null;
+  const shownNights = lockedToDates ? String(datesNights) : nights;
+  const shownDays = lockedToDates ? String(daysForNights(datesNights)) : days;
+  const changeNights = (v: string) => {
+    setNights(v);
+    if (v !== "") setDays(String(daysForNights(Number(v))));
+  };
+  const changeDays = (v: string) => {
+    setDays(v);
+    if (v !== "") setNights(String(nightsForDays(Number(v))));
+  };
   const onDatesChange = (start: string, end: string) => {
     // A new start date re-dates the itinerary: Day 1 on it, each day after
     // one date later. Changing only the end date leaves the days alone.
     if (start && start !== startDate) setDayRows((rows) => datesFromStart(rows, start));
     setStartDate(start);
     setEndDate(end);
-    if (!start || !end) return;
-    const diff = Math.round((Date.parse(end) - Date.parse(start)) / 86_400_000);
-    if (diff < 0 || diff > MAX_DURATION_NIGHTS) return;
+    // Kept in the form's own state too, so if a date is cleared later the
+    // dropdowns keep the duration the dates had.
+    const diff = nightsBetween(start, end);
+    if (diff === null) return;
     setNights(String(diff));
-    setDays(String(diff + 1));
+    setDays(String(daysForNights(diff)));
   };
   // Hotel offers, held here (not in the editor) so they are part of the draft.
   const [offerRows, setOfferRows] = useState<OfferRow[]>(() =>
@@ -496,8 +552,8 @@ function CustomPackageFormBody({
       hotelCategory: o.hotelCategory ?? "",
       hotels: o.hotels?.length ? o.hotels.map(String) : [""],
       note: o.note ?? "",
-      listPrice: o.listPrice ? String(o.listPrice) : "",
-      finalPrice: o.finalPrice ? String(o.finalPrice) : "",
+      priceRows: offerPriceRows(o, defaults?.adults ?? 1, defaults?.children ?? 0),
+      showTravellers: !(o.showTravellers === false || o.showTravellers === "false"),
     }))
   );
   const [roomCategory, setRoomCategory] = useState(defaults?.roomCategory ?? "");
@@ -662,11 +718,11 @@ function CustomPackageFormBody({
         <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div>
             <label className={labelClass} htmlFor="durationNights">Nights</label>
-            <CustomSelect name="durationNights" required value={nights} onChange={changeNights} placeholder="Select nights" options={nightOptions} />
+            <CustomSelect name="durationNights" required value={shownNights} onChange={changeNights} placeholder="Select nights" options={nightOptions} disabled={lockedToDates} />
           </div>
           <div>
             <label className={labelClass} htmlFor="durationDays">Days</label>
-            <CustomSelect name="durationDays" required value={days} onChange={changeDays} placeholder="Select days" options={dayOptions} />
+            <CustomSelect name="durationDays" required value={shownDays} onChange={changeDays} placeholder="Select days" options={dayOptions} disabled={lockedToDates} />
           </div>
         </div>
       </Section>
@@ -830,6 +886,13 @@ function CustomPackageFormBody({
             onChange={setOfferRows}
             hotelCategories={hotelCategories}
             hotelSuggestions={hotelSuggestions}
+            gstPercent={gstPercent}
+            packageTravellers={{
+              adults: Number(adults) || 0,
+              children: Number(children) || 0,
+              infants: Number(infants) || 0,
+            }}
+            showTravellers={showTravellerCount}
           />
         </div>
       </Section>
@@ -905,7 +968,7 @@ function CustomPackageFormBody({
             no field stretches across the whole card. */}
         <div className="grid grid-cols-1 items-start gap-8 xl:grid-cols-[minmax(0,1fr)_340px]">
           <div>
-            <p className={labelClass}>Per-person price (enter before GST)</p>
+            <p className="mb-1.5 block text-sm font-bold uppercase tracking-wide text-ink-900">Per-person price (enter before GST)</p>
             {!defaults?.priceLines?.length && defaults?.price ? (
               <p className="mb-3 text-sm text-ink-500">
                 Saved earlier with a total of {formatRupees(defaults.price)} before GST. Enter the per-person rates
@@ -920,14 +983,14 @@ function CustomPackageFormBody({
             {/* One header row and fixed columns, so every row's fields line up
                 under their heading instead of the first row carrying labels. */}
             <div className="mt-3 overflow-hidden rounded-xl border border-ink-200">
-              <div className={`${PRICE_ROW_GRID} border-b border-ink-200 bg-ink-50/60 px-4 py-2.5 text-xs font-bold text-ink-900`}>
+              <div className={`${PRICE_ROW_GRID} border-b border-ink-200 bg-ink-50/60 px-4 py-3 text-[15px] font-bold text-ink-900`}>
                 <span>Traveller type</span>
                 <span>Travellers</span>
                 <span>Rate / person (₹)</span>
                 <span className="text-right">With GST</span>
                 <span aria-hidden />
               </div>
-              <div className="divide-y divide-ink-100">
+              <div>
               {priceRows.map((row, index) => {
                 // Shown with GST added - the figure the customer will see.
                 const rate = Number(row.rate) || 0;
@@ -1000,7 +1063,7 @@ function CustomPackageFormBody({
                 <button
                   type="button"
                   onClick={() => setPriceRows((rows) => [...rows, { label: "", count: "1", rate: "" }])}
-                  className="flex w-full items-center gap-1.5 border-t border-ink-100 px-4 py-3 text-sm font-semibold text-brand-600 hover:bg-brand-50/50 hover:text-brand-700"
+                  className="flex w-full items-center gap-1.5 px-4 py-3 text-sm font-semibold text-brand-600 hover:bg-brand-50/50 hover:text-brand-700"
                 >
                   <Plus className="h-3.5 w-3.5" />
                   Add traveller type
@@ -1010,14 +1073,14 @@ function CustomPackageFormBody({
 
             {/* The divider sits on a wrapper: on the fieldset itself the
                 browser draws its border through the legend. */}
-            <div className="mt-6 border-t border-ink-100 pt-5">
+            <div className="mt-6">
             <fieldset>
               <legend className="text-sm font-medium text-ink-900">Show number of travellers on the itinerary?</legend>
               <input type="hidden" name="showTravellerCount" value={showTravellerCount ? "true" : "false"} />
               <div className="mt-2 inline-flex rounded-lg border border-ink-200 p-0.5">
                 {[
-                  { value: true, label: "Yes, show" },
-                  { value: false, label: "No, hide" },
+                  { value: true, label: "Show" },
+                  { value: false, label: "Hide" },
                 ].map((opt) => (
                   <button
                     key={opt.label}

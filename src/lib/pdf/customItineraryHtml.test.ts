@@ -131,8 +131,8 @@ describe("buildCustomItineraryHtml", () => {
     const html = await buildCustomItineraryHtml(
       makeData({
         offers: [
-          { title: "Hill view", categoryLabel: "3 Star", hotels: ["Hotel A", "Hotel B"], note: "Breakfast included", listPrice: 45000, finalPrice: 36900 },
-          { title: "", categoryLabel: "5 Star", hotels: ["Hotel C"], note: "", listPrice: 0, finalPrice: 80000 },
+          { title: "Hill view", categoryLabel: "3 Star", hotels: ["Hotel A", "Hotel B"], note: "Breakfast included", listPrice: 45000, finalPrice: 36900, priceLines: [], showTravellers: true },
+          { title: "", categoryLabel: "5 Star", hotels: ["Hotel C"], note: "", listPrice: 0, finalPrice: 80000, priceLines: [], showTravellers: true },
         ],
       }),
       context
@@ -146,7 +146,6 @@ describe("buildCustomItineraryHtml", () => {
     expect(html).toContain("₹45,000");
     expect(html).toContain("₹36,900");
     expect(html).toContain("18%");
-    expect(html).toContain("You save ₹8,100");
     // An offer without a list price shows its price and no discount.
     expect(html).toContain("₹80,000");
     expect(html.match(/class="offer-off"/g)).toHaveLength(1);
@@ -159,8 +158,8 @@ describe("buildCustomItineraryHtml", () => {
       makeData({
         priceLines: [{ label: "Adult", count: 2, rate: 25000 }],
         offers: [
-          { title: "", categoryLabel: "4 Star", hotels: ["Hotel A"], note: "", listPrice: 0, finalPrice: 35000 },
-          { title: "", categoryLabel: "5 Star", hotels: ["Hotel B"], note: "", listPrice: 0, finalPrice: 50000 },
+          { title: "", categoryLabel: "4 Star", hotels: ["Hotel A"], note: "", listPrice: 0, finalPrice: 35000, priceLines: [], showTravellers: true },
+          { title: "", categoryLabel: "5 Star", hotels: ["Hotel B"], note: "", listPrice: 0, finalPrice: 50000, priceLines: [], showTravellers: true },
         ],
       }),
       context
@@ -179,23 +178,107 @@ describe("buildCustomItineraryHtml", () => {
   });
 
   // A star category gets that many gold stars, in the price box and on its card.
-  it("shows the star count in the price box and one star per star on the card", async () => {
+  it("shows the star count in the price box and a single star on the card", async () => {
     const html = await buildCustomItineraryHtml(
       makeData({
         offers: [
-          { title: "", categoryLabel: "4 Star", hotels: ["Hotel A"], note: "", listPrice: 0, finalPrice: 35000 },
-          { title: "", categoryLabel: "5 Star", hotels: ["Hotel B"], note: "", listPrice: 0, finalPrice: 50000 },
-          { title: "", categoryLabel: "Budget", hotels: ["Hotel C"], note: "", listPrice: 0, finalPrice: 20000 },
+          { title: "", categoryLabel: "4 Star", hotels: ["Hotel A"], note: "", listPrice: 0, finalPrice: 35000, priceLines: [], showTravellers: true },
+          { title: "", categoryLabel: "5 Star", hotels: ["Hotel B"], note: "", listPrice: 0, finalPrice: 50000, priceLines: [], showTravellers: true },
+          { title: "", categoryLabel: "Budget", hotels: ["Hotel C"], note: "", listPrice: 0, finalPrice: 20000, priceLines: [], showTravellers: true },
         ],
       }),
       context
     );
-    // The price boxes read "4 ★" and "5 ★" (one star each); the cards draw (4 + 5) stars.
+    // The price boxes read "4 ★" and "5 ★" (one star each) and each card has a single star beside its name.
     // "Budget" has none.
-    expect(html.match(/<polygon/g)).toHaveLength(2 + 9);
+    expect(html.match(/<polygon/g)).toHaveLength(2 + 2);
     expect(html).toContain('<span class="rating"><b>5</b>');
     expect(html).toContain('<span class="rating"><b>4</b>');
     expect(html).toContain("Budget");
+  });
+
+  // Each offer lists who is travelling and what each kind pays per person.
+  it("lists each kind of traveller with its rate on an offer", async () => {
+    const html = await buildCustomItineraryHtml(
+      makeData({
+        offers: [
+          {
+            title: "",
+            categoryLabel: "4 Star",
+            hotels: ["Hotel A"],
+            note: "",
+            listPrice: 0,
+            finalPrice: 27500,
+            priceLines: [
+              { label: "Adult", count: 3, rate: 6500 },
+              { label: "Child with bed", count: 2, rate: 4000 },
+              { label: "Infant", count: 1, rate: 0 },
+            ],
+            showTravellers: true,
+          },
+        ],
+      }),
+      context
+    );
+    expect(html).toContain("Adult &times; 3");
+    expect(html).toContain("\u20B96,500 each");
+    expect(html).toContain("Child with bed &times; 2");
+    expect(html).toContain("\u20B94,000 each");
+    // A free infant says so rather than printing a zero.
+    expect(html).toContain("Infant &times; 1");
+    expect(html).toContain("Free");
+  });
+
+  it("leaves the travellers and their rates off an offer set to hide them", async () => {
+    const html = await buildCustomItineraryHtml(
+      makeData({
+        offers: [
+          {
+            title: "", categoryLabel: "4 Star", hotels: ["Hotel A"], note: "", listPrice: 0, finalPrice: 36000,
+            priceLines: [{ label: "Adult", count: 4, rate: 9000 }], showTravellers: false,
+          },
+          {
+            title: "", categoryLabel: "5 Star", hotels: ["Hotel B"], note: "", listPrice: 0, finalPrice: 60000,
+            priceLines: [{ label: "Adult", count: 4, rate: 15000 }], showTravellers: true,
+          },
+        ],
+      }),
+      context
+    );
+    // Only the second offer says who it is for.
+    expect(html.match(/class="offer-lines"/g)).toHaveLength(1);
+    expect(html).toContain("\u20B915,000 each");
+    expect(html).not.toContain("\u20B99,000 each");
+    // Both still show their package prices.
+    expect(html).toContain("\u20B936,000");
+    expect(html).toContain("\u20B960,000");
+  });
+
+  it("follows the offer, not the package, on whether to show the travellers", async () => {
+    const html = await buildCustomItineraryHtml(
+      makeData({
+        showTravellerCount: false,
+        offers: [
+          {
+            title: "", categoryLabel: "4 Star", hotels: ["Hotel A"], note: "", listPrice: 0, finalPrice: 36000,
+            priceLines: [{ label: "Adult", count: 4, rate: 9000 }], showTravellers: true,
+          },
+        ],
+      }),
+      context
+    );
+    expect(html).toContain("\u20B99,000 each");
+  });
+
+  it("shows no rows for an offer saved as a single total", async () => {
+    const html = await buildCustomItineraryHtml(
+      makeData({
+        offers: [{ title: "", categoryLabel: "4 Star", hotels: ["Hotel A"], note: "", listPrice: 0, finalPrice: 36000, priceLines: [], showTravellers: true }],
+      }),
+      context
+    );
+    expect(html).not.toContain('class="offer-lines"');
+    expect(html).toContain("\u20B936,000");
   });
 
   it("still shows the total when there are no offers", async () => {
@@ -213,7 +296,7 @@ describe("buildCustomItineraryHtml", () => {
   it("escapes what staff typed into an offer", async () => {
     const html = await buildCustomItineraryHtml(
       makeData({
-        offers: [{ title: "<b>x</b>", categoryLabel: "", hotels: ["<script>alert(1)</script>"], note: "", listPrice: 0, finalPrice: 5000 }],
+        offers: [{ title: "<b>x</b>", categoryLabel: "", hotels: ["<script>alert(1)</script>"], note: "", listPrice: 0, finalPrice: 5000, priceLines: [], showTravellers: true }],
       }),
       context
     );

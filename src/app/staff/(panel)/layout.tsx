@@ -51,7 +51,11 @@ export default async function StaffLayout({ children }: { children: ReactNode })
   const grantedFeatures = !isAdmin && user.jobRole ? await getRolePermissions(user.jobRole) : [];
   const can = (feature: StaffFeature) => isAdmin || hasFeature(grantedFeatures, feature);
 
-  const newLeadCount = can("leads") ? await db.lead.count({ where: { ...leadScope(session), status: "NEW" } }) : 0;
+  // Only the sidebar's badge: if the database can't answer this one count
+  // (after the retries in db.ts), the page still opens, without the number.
+  const newLeadCount = can("leads")
+    ? await db.lead.count({ where: { ...leadScope(session), status: "NEW" } }).catch(() => 0)
+    : 0;
 
   const sections: PanelNavSection[] = [
     { items: [{ href: "/staff", label: "Dashboard", icon: <LayoutDashboard className="h-full w-full" /> }] },

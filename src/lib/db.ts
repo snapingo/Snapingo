@@ -1,5 +1,6 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@/generated/prisma/client";
+import { RETRY_DELAYS_MS, isTransientDbError } from "@/lib/dbErrors";
 
 // Connection pool sizing, measured against this database rather than guessed:
 // Postgres reports max_connections = 100 with 3 reserved for superusers, so
@@ -67,26 +68,26 @@ const READ_OPERATIONS = new Set([
   "groupBy",
 ]);
 
-// The Supabase pooler closes connections that sit idle, and the pool only
-// finds out when the next query is sent down one - which then fails with
-// "Connection terminated unexpectedly" (seen on the admin layout's lead
-// count). The broken connection is discarded by then, so one retry runs on a
-// fresh one. Writes are never retried: whether the first attempt reached the
-// database is unknown, and running a create twice would duplicate it.
-function isDroppedConnection(error: unknown): boolean {
-  const text = error instanceof Error ? `${error.message} ${String(error.cause ?? "")}` : String(error);
-  return /Connection terminated|terminating connection|ECONNRESET|socket hang up/i.test(text);
-}
-
+// A read that fails because the connection hiccupped is tried again, twice,
+// after a short pause. Two things cause it: the Supabase pooler closes
+// connections that sit idle (the pool only finds out when the next query goes
+// down one - "Connection terminated unexpectedly"), and the database being
+// unreachable for a moment ("Can't reach database server"). Real errors - a
+// bad query, a constraint - are not retried (src/lib/dbErrors.ts).
+// Writes are never retried: whether the first attempt reached the database is
+// unknown, and running a create twice would duplicate it.
 function createClient() {
   return new PrismaClient({ adapter }).$extends({
     query: {
       async $allOperations({ operation, args, query }) {
-        try {
-          return await query(args);
-        } catch (error) {
-          if (!READ_OPERATIONS.has(operation) || !isDroppedConnection(error)) throw error;
-          return query(args);
+        if (!READ_OPERATIONS.has(operation)) return query(args);
+        for (let attempt = 0; ; attempt += 1) {
+          try {
+            return await query(args);
+          } catch (error) {
+            if (!isTransientDbError(error) || attempt >= RETRY_DELAYS_MS.length) throw error;
+            await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
+          }
         }
       },
     },

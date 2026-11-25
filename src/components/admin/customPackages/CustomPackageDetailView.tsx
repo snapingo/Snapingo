@@ -8,7 +8,7 @@ import RestoreButton from "@/components/admin/RestoreButton";
 import AddPackageButton from "@/components/admin/customPackages/AddPackageButton";
 import DeletePackageButton from "@/components/admin/customPackages/DeletePackageButton";
 import OfferCard from "@/components/admin/customPackages/OfferCard";
-import { packageAmountText, parseOffers } from "@/lib/offers";
+import { offersWithGst, packageAmountText, parseOffers } from "@/lib/offers";
 import { MAX_PACKAGES_PER_TRIP, packageLabel } from "@/lib/tripPackages";
 import { restoreCustomPackageAction } from "@/lib/actions/customPackages";
 import { formatRupees } from "@/lib/gst";
@@ -73,7 +73,7 @@ export default async function CustomPackageDetailView({
   const tripPackages = await db.customPackage.findMany({
     where: { tripId: quotation.tripId, deletedAt: null },
     orderBy: { packageNumber: "asc" },
-    select: { id: true, packageNumber: true, destinationName: true, totalAmount: true, offers: true },
+    select: { id: true, packageNumber: true, destinationName: true, totalAmount: true, gstPercent: true, offers: true },
   });
   const canAddToTrip = canEdit && !quotation.deletedAt;
 
@@ -87,7 +87,8 @@ export default async function CustomPackageDetailView({
   );
   const exclusions = getEffectiveExclusions(quotation.exclusions, quotation.inclusions, inclusionOptions);
   const priceLines = parsePriceLines(quotation.priceLines);
-  const offers = parseOffers(quotation.offers);
+  // As the customer sees them: with GST added.
+  const offers = offersWithGst(parseOffers(quotation.offers), quotation.gstPercent);
 
   const facts: [string, string][] = [
     ["Customer", quotation.customerName],
@@ -257,7 +258,7 @@ export default async function CustomPackageDetailView({
                     <span className={`block truncate text-sm font-semibold ${current ? "text-ink-900" : "text-ink-700"}`}>
                       {p.destinationName}
                     </span>
-                    <span className="block text-xs text-ink-500">{packageAmountText(p.totalAmount, parseOffers(p.offers))}</span>
+                    <span className="block text-xs text-ink-500">{packageAmountText(p.totalAmount, offersWithGst(parseOffers(p.offers), p.gstPercent))}</span>
                   </span>
                 </Link>
               );
@@ -336,6 +337,8 @@ export default async function CustomPackageDetailView({
                   note={offer.note}
                   listPrice={offer.listPrice}
                   finalPrice={offer.finalPrice}
+                  priceLines={offer.priceLines}
+                  showTravellers={offer.showTravellers}
                 />
               ))}
             </div>

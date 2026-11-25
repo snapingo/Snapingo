@@ -46,3 +46,18 @@ export function parseDuration(value: string): Duration | null {
 
   return { nights, days };
 }
+
+/**
+ * A trip's days and nights go together: N nights is N + 1 days. Choosing one
+ * in the form sets the other, so a combination like "15 Nights / 8 Days"
+ * can't be built by hand.
+ */
+export const daysForNights = (nights: number): number => nights + 1;
+
+/** Whole nights between two yyyy-mm-dd dates, or null when either is missing, reversed or too long. */
+export function nightsBetween(start?: string, end?: string): number | null {
+  if (!start || !end) return null;
+  const diff = Math.round((Date.parse(end) - Date.parse(start)) / 86_400_000);
+  return Number.isFinite(diff) && diff >= 0 && diff <= MAX_DURATION_NIGHTS ? diff : null;
+}
+export const nightsForDays = (days: number): number => Math.max(0, days - 1);

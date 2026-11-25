@@ -8,7 +8,7 @@ import { getSettings } from "@/lib/settings";
 import { getMasterList } from "@/lib/masterData";
 import { getEffectiveExclusions, resolveInclusions } from "@/lib/inclusionHelpers";
 import { parsePriceLines } from "@/lib/priceLines";
-import { parseOffers } from "@/lib/offers";
+import { offersWithGst, parseOffers } from "@/lib/offers";
 import type { CustomItineraryContext, CustomItineraryData } from "@/lib/pdf/customItineraryHtml";
 
 const IMAGE_MIME: Record<string, string> = {
@@ -140,13 +140,15 @@ export async function loadCustomItinerary(
       price: quotation.price,
       priceLines: parsePriceLines(quotation.priceLines),
       // Category slug -> its current label, like the stays above.
-      offers: parseOffers(quotation.offers).map((o) => ({
+      offers: offersWithGst(parseOffers(quotation.offers), quotation.gstPercent).map((o) => ({
         title: o.title,
         categoryLabel: o.hotelCategory ? hotelLabels.get(o.hotelCategory) ?? "" : "",
         hotels: o.hotels,
         note: o.note,
         listPrice: o.listPrice,
         finalPrice: o.finalPrice,
+        priceLines: o.priceLines,
+        showTravellers: o.showTravellers,
       })),
       showTravellerCount: quotation.showTravellerCount,
       gstPercent: quotation.gstPercent,

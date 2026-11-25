@@ -4,7 +4,7 @@ import path from "node:path";
 import type { ContentBlockView } from "@/lib/contentBlocks";
 import { parseContentBody } from "@/lib/contentBlocks";
 import { formatRupees } from "@/lib/gst";
-import { labelOffers, offerDiscount, starRating } from "@/lib/offers";
+import { labelOffers, offerDiscount, starRating, type OfferLine } from "@/lib/offers";
 import { priceLineAmountWithGst, rateWithGst, type PriceLine } from "@/lib/priceLines";
 import { siteConfig } from "@/lib/siteConfig";
 import { splitTravellerAges } from "@/lib/travellerAges";
@@ -78,6 +78,10 @@ export type CustomItineraryData = {
     note: string;
     listPrice: number;
     finalPrice: number;
+    // Who is travelling and what each kind pays per person (with GST), as
+    // rows under the price - left off when the group size is hidden.
+    priceLines: OfferLine[];
+    showTravellers: boolean;
   }[];
   // False leaves the group size off: no Travellers/age rows, no "× N".
   showTravellerCount: boolean;
@@ -325,11 +329,7 @@ export async function buildCustomItineraryHtml(
            <div class="offer-body">
            <div class="offer-top">
              <div class="offer-head">
-               ${(() => {
-                 const rating = starRating(offer.categoryLabel);
-                 return rating ? starsHtml(rating.stars, 14) : "";
-               })()}
-               <p class="offer-name">${esc(heading)}</p>
+               <p class="offer-name">${starRating(offer.categoryLabel) ? starsHtml(1, 16) : ""}${esc(heading)}</p>
                ${subheading ? `<p class="offer-sub">${esc(subheading)}</p>` : ""}
              </div>
              ${percent > 0 ? `<div class="offer-off"><b>${percent}%</b><span>off</span></div>` : ""}
@@ -345,8 +345,22 @@ export async function buildCustomItineraryHtml(
              ${amount > 0 ? `<p class="offer-was">${esc(formatRupees(offer.listPrice))}</p>` : ""}
              <div class="offer-now-row">
                <p class="offer-now">${esc(formatRupees(offer.finalPrice))}</p>
-               ${amount > 0 ? `<p class="offer-save">You save ${esc(formatRupees(amount))}</p>` : ""}
              </div>
+             ${
+               // Who is travelling and what each pays: left off when the offer
+               // is set to hide them, as either gives the head count away.
+               offer.showTravellers && offer.priceLines.some((l) => l.count > 0)
+                 ? `<ul class="offer-lines">${offer.priceLines
+                     .filter((l) => l.count > 0)
+                     .map(
+                       (l) =>
+                         `<li><span>${esc(l.label)} &times; ${esc(l.count)}</span><b>${
+                           l.rate > 0 ? `${esc(formatRupees(l.rate))} each` : "Free"
+                         }</b></li>`
+                     )
+                     .join("")}</ul>`
+                 : ""
+             }
            </div>
          </article>`;
     })
@@ -592,7 +606,7 @@ export async function buildCustomItineraryHtml(
   .rating b { font-size: 19px; line-height: 1; font-weight: 800; color: #fff; }
   .stars { display: inline-flex; gap: 3px; vertical-align: middle; }
   .stars svg { display: block; }
-  .offer-head .stars { margin-bottom: 4px; }
+  .offer-name .stars { margin-right: 6px; vertical-align: -2px; }
   .price-label { font-size: 14px; line-height: 20px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.025em; color: ${BRAND_700}; }
   .price-amount { font-size: 24px; line-height: 1.2; font-weight: 800; color: ${BRAND}; white-space: nowrap; }
 
@@ -630,6 +644,9 @@ export async function buildCustomItineraryHtml(
   .offer-was { font-size: 14px; line-height: 20px; font-weight: 600; color: ${INK_400}; text-decoration: line-through; }
   .offer-now-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
   .offer-now { font-size: 26px; line-height: 1.2; font-weight: 800; color: ${INK_900}; white-space: nowrap; }
+  .offer-lines { list-style: none; margin: 8px 0 0; padding: 0; font-size: 14px; line-height: 22px; color: ${INK_500}; }
+  .offer-lines li { display: flex; justify-content: space-between; gap: 10px; }
+  .offer-lines b { font-weight: 800; color: ${INK_900}; }
   .offer-save { font-size: 14px; line-height: 20px; font-weight: 700; color: ${EMERALD_800}; }
   table.prices tr.total td { font-size: 20px; font-weight: 800; color: ${BRAND}; }
   .note-strong { margin-top: 6px; font-size: 16px; line-height: 24px; font-weight: 700; color: ${BRAND}; }

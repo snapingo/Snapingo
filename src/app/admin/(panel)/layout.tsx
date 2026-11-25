@@ -42,7 +42,9 @@ export const metadata: Metadata = {
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   await requireSession(["ADMIN"]);
-  const newLeadCount = await db.lead.count({ where: { status: "NEW" } });
+  // Only the sidebar's badge: if the database can't answer this one count
+  // (after the retries in db.ts), the page still opens, without the number.
+  const newLeadCount = await db.lead.count({ where: { status: "NEW" } }).catch(() => 0);
 
   return (
     <PanelShell

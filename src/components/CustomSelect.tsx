@@ -44,6 +44,7 @@ export default function CustomSelect({
   placeholder = "Select an option",
   name,
   required,
+  disabled = false,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -51,6 +52,8 @@ export default function CustomSelect({
   placeholder?: string;
   name?: string;
   required?: boolean;
+  // Shown but not changeable (its value still posts with the form).
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
@@ -70,6 +73,7 @@ export default function CustomSelect({
   const selected = selectedIndex >= 0 ? options[selectedIndex] : undefined;
 
   const openList = (startIndex?: number) => {
+    if (disabled) return;
     if (buttonRef.current) setRect(measure(buttonRef.current));
     setHighlightedIndex(startIndex ?? (selectedIndex >= 0 ? selectedIndex : 0));
     setOpen(true);
@@ -196,13 +200,16 @@ export default function CustomSelect({
       <button
         ref={buttonRef}
         type="button"
+        disabled={disabled}
         onClick={() => (open ? closeList() : openList())}
         onKeyDown={handleTriggerKeyDown}
         aria-haspopup="listbox"
         aria-expanded={open}
         className={`flex w-full items-center justify-between gap-2 rounded-xl border bg-white px-4 py-3 text-left text-sm transition focus:outline-none ${
           open ? "border-brand-500 ring-2 ring-brand-100" : "border-ink-200 hover:border-brand-300"
-        } ${selected ? "text-ink-900" : "text-ink-400"}`}
+        } ${selected ? "text-ink-900" : "text-ink-400"} ${
+          disabled ? "cursor-not-allowed bg-ink-50 text-ink-500 hover:border-ink-200" : ""
+        }`}
       >
         <span className="truncate">{selected ? selected.label : placeholder}</span>
         <ChevronDown
