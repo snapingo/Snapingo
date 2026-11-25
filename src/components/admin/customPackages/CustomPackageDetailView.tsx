@@ -5,6 +5,9 @@ import { db } from "@/lib/db";
 import { canUseStaffFeature, getSession } from "@/lib/dal";
 import { canEditCustomPackage } from "@/lib/customPackageAccess";
 import RestoreButton from "@/components/admin/RestoreButton";
+import AddPackageButton from "@/components/admin/customPackages/AddPackageButton";
+import DeletePackageButton from "@/components/admin/customPackages/DeletePackageButton";
+import { MAX_PACKAGES_PER_TRIP, packageLabel } from "@/lib/tripPackages";
 import { restoreCustomPackageAction } from "@/lib/actions/customPackages";
 import { formatRupees } from "@/lib/gst";
 import { parsePriceLines, priceLineAmount } from "@/lib/priceLines";
@@ -63,6 +66,14 @@ export default async function CustomPackageDetailView({
   const booking = canBook
     ? await db.booking.findUnique({ where: { tripId: quotation.tripId }, select: { id: true } })
     : null;
+
+  // Every live package on this Trip ID (this one included), in order.
+  const tripPackages = await db.customPackage.findMany({
+    where: { tripId: quotation.tripId, deletedAt: null },
+    orderBy: { packageNumber: "asc" },
+    select: { id: true, packageNumber: true, destinationName: true, totalAmount: true },
+  });
+  const canAddToTrip = canEdit && !quotation.deletedAt;
 
   const roomLabels = new Map(roomOptions.map((o) => [o.value, o.label]));
   const hotelLabels = new Map(hotelOptions.map((o) => [o.value, o.label]));
@@ -174,6 +185,29 @@ export default async function CustomPackageDetailView({
               Edit
             </Link>
           )}
+          {canAddToTrip && (
+            <AddPackageButton
+              basePath={basePath}
+              packageId={quotation.id}
+              tripId={quotation.tripId}
+              destinationName={quotation.destinationName}
+              count={tripPackages.length}
+              max={MAX_PACKAGES_PER_TRIP}
+            />
+          )}
+          {/* Once a trip has more than one package, each can be removed from
+              here; the page then moves on to another package of the trip.
+              (A trip's only package is deleted from the list.) */}
+          {canAddToTrip && tripPackages.length > 1 && (
+            <DeletePackageButton
+              packageId={quotation.id}
+              label={`${packageLabel(tripPackages.findIndex((p) => p.id === quotation.id) + 1)} (${quotation.destinationName})`}
+              tripId={quotation.tripId}
+              goToHref={`${basePath}/custom-packages/${
+                (tripPackages.find((p) => p.id !== quotation.id) ?? quotation).id
+              }`}
+            />
+          )}
           {canBook &&
             (booking ? (
               <Link
@@ -195,6 +229,47 @@ export default async function CustomPackageDetailView({
         </div>
         )}
       </div>
+
+      {/* The trip's other packages (Manali, Shimla, Goa...): one tap between them. */}
+      {tripPackages.length > 1 && (
+        <nav aria-label="Packages on this trip" className="mt-5">
+          <p className="mb-2 px-1 text-xs font-semibold text-ink-500">
+            {tripPackages.length} packages on this trip
+            <span className="text-ink-400"> · up to {MAX_PACKAGES_PER_TRIP}</span>
+          </p>
+          <div className="scrollbar-thin -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+            {tripPackages.map((p, index) => {
+              const current = p.id === quotation.id;
+              return (
+                <Link
+                  key={p.id}
+                  href={`${basePath}/custom-packages/${p.id}`}
+                  aria-current={current ? "page" : undefined}
+                  className={`group flex min-w-44 shrink-0 items-center gap-3 rounded-xl border px-3.5 py-2.5 transition ${
+                    current
+                      ? "border-brand-300 bg-white shadow-sm ring-1 ring-brand-200"
+                      : "border-transparent bg-ink-100/60 hover:border-ink-200 hover:bg-white"
+                  }`}
+                >
+                  <span
+                    className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-bold transition ${
+                      current ? "bg-brand-600 text-white" : "bg-white text-ink-600 group-hover:bg-ink-100"
+                    }`}
+                  >
+                    {index + 1}
+                  </span>
+                  <span className="min-w-0">
+                    <span className={`block truncate text-sm font-semibold ${current ? "text-ink-900" : "text-ink-700"}`}>
+                      {p.destinationName}
+                    </span>
+                    <span className="block text-xs text-ink-500">₹{p.totalAmount.toLocaleString("en-IN")}</span>
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        </nav>
+      )}
 
       <div className="mt-6 divide-y divide-ink-100 rounded-2xl border border-ink-100 bg-white shadow-sm">
         <Section title="Trip details">
@@ -272,8 +347,8 @@ export default async function CustomPackageDetailView({
         <div className="grid grid-cols-1 divide-y divide-ink-100 sm:grid-cols-2 sm:divide-x sm:divide-y-0">
           <Section title="Inclusions">
             <ul className="space-y-1 text-sm text-ink-800">
-              {inclusions.map((i) => (
-                <li key={i.value}>• {i.label}</li>
+              {inclusions.map((i, idx) => (
+                <li key={`${i.value}-${idx}`}>• {i.label}</li>
               ))}
               {inclusions.length === 0 && <li className="text-ink-500">None selected.</li>}
             </ul>
@@ -281,8 +356,8 @@ export default async function CustomPackageDetailView({
 
           <Section title="Exclusions (automatic)">
             <ul className="space-y-1 text-sm text-ink-800">
-              {exclusions.map((e) => (
-                <li key={e}>• {e}</li>
+              {exclusions.map((e, idx) => (
+                <li key={`${e}-${idx}`}>• {e}</li>
               ))}
               {exclusions.length === 0 && <li className="text-ink-500">Nothing excluded.</li>}
             </ul>

@@ -296,30 +296,41 @@ export async function buildCustomItineraryHtml(
 
   // ---- Price breakup: what each traveller costs with GST already added,
   // adding up to the total shown at the top. No separate GST line - the
-  // customer sees one all-in rate. Without the head count there's no
-  // "× N" and no Amount column, which would give the count away.
+  // customer sees one all-in rate. When the head count is hidden, no per-
+  // person rates are printed either (they'd give the group size away when
+  // multiplied against the total): just the total price.
   const withCount = data.showTravellerCount;
-  const priceBreakup = data.priceLines.length
-    ? `<section class="mt-4 avoid-break">
+  const priceBreakup = !data.priceLines.length
+    ? ""
+    : withCount
+      ? `<section class="mt-4 avoid-break">
          <h2 class="box-heading">Price Breakup</h2>
          <table class="stays prices">
-           <thead><tr><th>Traveller</th><th>Rate / Person</th>${withCount ? "<th>Amount</th>" : ""}</tr></thead>
+           <thead><tr><th>Traveller</th><th>Rate / Person</th><th>Amount</th></tr></thead>
            <tbody>
              ${data.priceLines
                .map(
                  (line) => `<tr>
-                   <td>${esc(line.label)}${withCount ? ` &times; ${esc(line.count)}` : ""}</td>
+                   <td>${esc(line.label)} &times; ${esc(line.count)}</td>
                    <td>${esc(formatRupees(rateWithGst(line.rate, data.gstPercent)))}</td>
-                   ${withCount ? `<td>${esc(formatRupees(priceLineAmountWithGst(line, data.gstPercent)))}</td>` : ""}
+                   <td>${esc(formatRupees(priceLineAmountWithGst(line, data.gstPercent)))}</td>
                  </tr>`
                )
                .join("")}
-             <tr class="total"><td${withCount ? ' colspan="2"' : ""}>Total Price</td><td>${esc(formatRupees(data.totalAmount))}</td></tr>
+             <tr class="total"><td colspan="2">Total Price</td><td>${esc(formatRupees(data.totalAmount))}</td></tr>
            </tbody>
          </table>
          <p class="note-strong">&bull; Rates are per person and inclusive of GST.</p>
        </section>`
-    : "";
+      : `<section class="mt-4 avoid-break">
+         <h2 class="box-heading">Price Breakup</h2>
+         <table class="stays prices">
+           <tbody>
+             <tr class="total"><td>Total Price</td><td>${esc(formatRupees(data.totalAmount))}</td></tr>
+           </tbody>
+         </table>
+         <p class="note-strong">&bull; Total price is inclusive of GST.</p>
+       </section>`;
 
   const vehicle = data.vehicleName
     ? `<section class="box mt-4 avoid-break">

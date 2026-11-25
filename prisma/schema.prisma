@@ -471,9 +471,13 @@ model Payment {
 model CustomPackage {
   id     String @id @default(cuid())
   // Customer-facing reference printed on the PDF, e.g. SNP-2026-0042.
-  // Generated in src/lib/tripId.ts; unique so a retry can never hand two
-  // quotations the same number.
-  tripId String @unique
+  // Generated in src/lib/tripId.ts. One Trip ID can carry several packages
+  // for the same customer (Manali, Shimla, Goa...), up to
+  // MAX_PACKAGES_PER_TRIP in src/lib/tripPackages.ts: `packageNumber` is the
+  // 1, 2, 3... of the package within its trip, and the pair is unique so a
+  // retry can never hand two packages the same slot.
+  tripId        String
+  packageNumber Int    @default(1)
 
   // Who it's for. Free text rather than a Customer table: staff quote for
   // people who are not yet in the system, and forcing a record first would
@@ -567,6 +571,8 @@ model CustomPackage {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([tripId, packageNumber])
+  @@index([tripId])
   @@index([createdAt])
   @@index([createdById])
   @@index([deletedAt])

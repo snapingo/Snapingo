@@ -1,8 +1,8 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState } from "react";
 import type { FormState } from "@/lib/actions/bookings";
-import CustomSelect from "@/components/CustomSelect";
+import SuggestInput from "@/components/admin/SuggestInput";
 
 const inputClass =
   "w-full rounded-xl border border-ink-200 bg-white px-4 py-2.5 text-sm text-ink-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100";
@@ -37,15 +37,6 @@ export default function BookingForm({
   destinationOptions?: string[];
 }) {
   const [state, formAction, pending] = useActionState(action, undefined);
-  const [destinationName, setDestinationName] = useState(defaults?.destinationName ?? "");
-
-  // The current value might be a one-off name typed on a lead (not in the
-  // catalog) - keep it selectable instead of silently blanking the field.
-  const destinationSelectOptions = (
-    destinationName && !destinationOptions.includes(destinationName)
-      ? [destinationName, ...destinationOptions]
-      : destinationOptions
-  ).map((name) => ({ value: name, label: name }));
 
   return (
     <form action={formAction} className="mt-6 rounded-2xl border border-ink-100 bg-white p-6 shadow-sm">
@@ -82,12 +73,14 @@ export default function BookingForm({
         <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div>
             <label className={labelClass} htmlFor="destinationName">Destination</label>
-            <CustomSelect
+            {/* Type any destination; previously used ones are suggested. */}
+            <SuggestInput
+              id="destinationName"
               name="destinationName"
-              value={destinationName}
-              onChange={setDestinationName}
-              placeholder="Select destination"
-              options={destinationSelectOptions}
+              suggestions={destinationOptions}
+              defaultValue={defaults?.destinationName}
+              placeholder="Type or pick a destination"
+              className={inputClass}
             />
           </div>
           <div>

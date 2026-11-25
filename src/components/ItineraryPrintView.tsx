@@ -274,8 +274,8 @@ export default async function ItineraryPrintView({ pkg }: { pkg: TourPackage }) 
               </tr>
             </thead>
             <tbody>
-              {nightStays.map((stay) => (
-                <tr key={stay.city} className="break-inside-avoid">
+              {nightStays.map((stay, idx) => (
+                <tr key={`${stay.city}-${idx}`} className="break-inside-avoid">
                   <td className="border border-brand-200 px-3 py-2 font-semibold text-ink-900">
                     {stay.city} · {stay.nights} Night{stay.nights === 1 ? "" : "s"}
                   </td>
@@ -337,8 +337,8 @@ export default async function ItineraryPrintView({ pkg }: { pkg: TourPackage }) 
           Highlights :
         </h2>
         <ul className="mt-2 space-y-1.5 text-base font-semibold text-ink-900">
-          {pkg.highlights.map((h) => (
-            <li key={h}>
+          {pkg.highlights.map((h, idx) => (
+            <li key={`${h}-${idx}`}>
               <span className="text-brand-600">&bull;</span> {h}
             </li>
           ))}
@@ -386,8 +386,8 @@ export default async function ItineraryPrintView({ pkg }: { pkg: TourPackage }) 
             Inclusion
           </h2>
           <ul className="mt-2 space-y-1 text-[19px] text-ink-800">
-            {(pkg.inclusionDetails ?? []).map((inc) => (
-              <li key={inc.value} className="break-inside-avoid">&bull; {inc.label}</li>
+            {(pkg.inclusionDetails ?? []).map((inc, idx) => (
+              <li key={`${inc.value}-${idx}`} className="break-inside-avoid">&bull; {inc.label}</li>
             ))}
           </ul>
         </section>
@@ -396,8 +396,8 @@ export default async function ItineraryPrintView({ pkg }: { pkg: TourPackage }) 
             Exclusions
           </h2>
           <ul className="mt-2 space-y-1 text-[19px] text-ink-800">
-            {pkg.exclusions.map((ex) => (
-              <li key={ex} className="break-inside-avoid">&bull; {ex}</li>
+            {pkg.exclusions.map((ex, idx) => (
+              <li key={`${ex}-${idx}`} className="break-inside-avoid">&bull; {ex}</li>
             ))}
           </ul>
         </section>

@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireStaffFeature } from "@/lib/dal";
 import { db } from "@/lib/db";
-import { getDestinationNames } from "@/lib/content/destinations";
+import { getSuggestions } from "@/lib/suggestions";
 import BookingForm from "@/components/admin/bookings/BookingForm";
 import { updateBookingAction } from "@/lib/actions/bookings";
 
@@ -10,7 +10,7 @@ export default async function StaffEditBookingPage({ params }: { params: Promise
   const { id } = await params;
   const [booking, destinationOptions] = await Promise.all([
     db.booking.findFirst({ where: { id, deletedAt: null } }),
-    getDestinationNames(),
+    getSuggestions("destinationName"),
   ]);
   if (!booking) notFound();
 

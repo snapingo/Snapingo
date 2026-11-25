@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireSession, requireStaffFeature } from "@/lib/dal";
 import { canAccessLead } from "@/lib/leads";
-import { canEditCustomPackageById } from "@/lib/customPackageAccess";
+import { canEditCustomPackage, canEditCustomPackageById } from "@/lib/customPackageAccess";
+import { MAX_PACKAGES_PER_TRIP, canAddPackage, nextPackageNumber } from "@/lib/tripPackages";
 import type { SessionPayload } from "@/lib/session";
 import { customPackageSchema } from "@/lib/validation/customPackage";
 import { withNewTripId } from "@/lib/tripIdServer";
@@ -29,6 +30,25 @@ function parse(formData: FormData) {
 }
 
 /**
+ * Creates a package in the next free slot of an existing trip. Two people
+ * adding at the same moment can pick the same slot; the (tripId, packageNumber)
+ * unique index rejects the second, which then just takes the following one.
+ */
+async function createOnTrip<T>(tripId: string, create: (packageNumber: number) => Promise<T>): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const rows = await db.customPackage.findMany({ where: { tripId }, select: { packageNumber: true } });
+    try {
+      return await create(nextPackageNumber(rows.map((r) => r.packageNumber)));
+    } catch (error) {
+      if ((error as { code?: string } | null)?.code !== "P2002") throw error;
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
+/**
  * Creates or updates a customer quotation.
  *
  * Nothing here writes to `Package`, which is what keeps quotations off the
@@ -45,7 +65,7 @@ export async function saveCustomPackageAction(
   const parsed = customPackageSchema.safeParse(parse(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Please check the form." };
 
-  const { id, days, stays, startDate, endDate, leadId, customerEmail, ...data } = parsed.data;
+  const { id, tripOfId, days, stays, startDate, endDate, leadId, customerEmail, ...data } = parsed.data;
 
   if (days.length === 0) {
     return { error: "Add at least one day to the itinerary." };
@@ -64,6 +84,21 @@ export async function saveCustomPackageAction(
   }
   if (!isNew && !(await canEditCustomPackageById(session, id ?? ""))) {
     return { error: "You can only edit quotations you created." };
+  }
+
+  // "Add package": another package on an existing package's Trip ID. The
+  // trip's customer stays the customer, whatever the form posted.
+  const source =
+    isNew && tripOfId ? await db.customPackage.findFirst({ where: { id: tripOfId, deletedAt: null } }) : null;
+  if (isNew && tripOfId) {
+    if (!source) return { error: "The package you're adding to no longer exists." };
+    if (!canEditCustomPackage(session, source.createdById)) {
+      return { error: "You can only add packages to trips you created." };
+    }
+    const live = await db.customPackage.count({ where: { tripId: source.tripId, deletedAt: null } });
+    if (!canAddPackage(live)) {
+      return { error: `A trip can have at most ${MAX_PACKAGES_PER_TRIP} packages.` };
+    }
   }
 
   // Master-list values are re-checked server-side: a Server Action is a plain
@@ -120,9 +155,31 @@ export async function saveCustomPackageAction(
     // Blank means "leave it off the PDF", stored as null rather than "".
     preparedByName: data.preparedByName || null,
     preparedByRole: data.preparedByRole || null,
+    ...(source
+      ? {
+          customerName: source.customerName,
+          customerPhone: source.customerPhone,
+          customerEmail: source.customerEmail,
+          leadId: source.leadId,
+        }
+      : {}),
   };
 
-  const saved = isNew
+  const saved = source
+    ? await createOnTrip(source.tripId, (packageNumber) =>
+        db.customPackage.create({
+          data: {
+            ...shared,
+            tripId: source.tripId,
+            packageNumber,
+            createdById: session.userId,
+            days: { create: days },
+            stays: { create: stayRows },
+          },
+          select: { id: true },
+        })
+      )
+    : isNew
     ? await withNewTripId((tripId) =>
         db.customPackage.create({
           data: {
@@ -152,8 +209,9 @@ export async function saveCustomPackageAction(
   // the lead's Edit screen *is* this form, so what staff correct here (a
   // misspelt name, the real dates, the party size) is the lead's truth too.
   // Only the fields a lead has are written; itinerary, hotels and price
-  // belong to the quotation alone.
-  if (leadId) {
+  // belong to the quotation alone. An extra package on a trip is an
+  // alternative, not a correction, so it leaves the lead as it is.
+  if (leadId && !source) {
     await db.lead.update({
       where: { id: leadId },
       data: {

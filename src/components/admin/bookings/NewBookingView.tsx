@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/dal";
 import { leadScope } from "@/lib/leads";
-import { getDestinationNames } from "@/lib/content/destinations";
+import { getSuggestions } from "@/lib/suggestions";
 import BookingForm, { type BookingDefaults } from "@/components/admin/bookings/BookingForm";
 import { createBookingAction } from "@/lib/actions/bookings";
 import { toDateInput } from "@/lib/customPackageDefaults";
@@ -23,7 +23,7 @@ export default async function NewBookingView({
     // Pre-fill only from a lead this user may see (staff: assigned to them).
     leadId ? db.lead.findFirst({ where: { id: leadId, ...leadScope(session) } }) : null,
     customPackageId ? db.customPackage.findFirst({ where: { id: customPackageId, deletedAt: null } }) : null,
-    getDestinationNames(),
+    getSuggestions("destinationName"),
   ]);
   // A lead converted after it was quoted books that quotation - the same one
   // createBookingAction takes the Trip ID from - so its dates and price come too.

@@ -1,10 +1,11 @@
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import Image from "next/image";
 import { LogOut, MonitorSmartphone, ShieldCheck } from "lucide-react";
 import { logoutAction } from "@/lib/actions/auth";
 import PanelNav from "@/components/admin/PanelNav";
 import DesktopOnlyBrandBar from "@/components/admin/DesktopOnlyBrandBar";
 import AutoRefresh from "@/components/admin/AutoRefresh";
+import FormDraftKeeper from "@/components/admin/FormDraftKeeper";
 import NotificationBell from "@/components/admin/NotificationBell";
 import { NotificationProvider } from "@/components/admin/NotificationCenter";
 import { UploadsProvider } from "@/components/admin/UploadsProvider";
@@ -43,6 +44,9 @@ export default function PanelShell({
       <UploadsProvider enabled={uploadsEnabled}>
       <div className="flex h-screen overflow-hidden bg-ink-50/60 print:h-auto print:overflow-visible">
         <AutoRefresh />
+        <Suspense fallback={null}>
+          <FormDraftKeeper />
+        </Suspense>
         <aside className="print-hide hidden h-full w-64 shrink-0 flex-col border-r border-ink-100 bg-white lg:flex">
           <div className="flex shrink-0 items-center gap-2.5 border-b border-ink-100 px-6 py-5">
             {/* The brand wordmark (pink icon + pink lettering) rather than the
@@ -67,7 +71,9 @@ export default function PanelShell({
           </div>
 
           <div className="scrollbar-thin flex-1 overflow-y-auto">
-            <PanelNav sections={sections} rootHref={rootHref} />
+            <Suspense fallback={null}>
+              <PanelNav sections={sections} rootHref={rootHref} />
+            </Suspense>
           </div>
 
           <div className="shrink-0 border-t border-ink-100 p-4">

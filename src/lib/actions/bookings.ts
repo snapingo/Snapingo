@@ -192,3 +192,32 @@ export async function addPaymentAction(bookingId: string, formData: FormData): P
   await db.payment.create({ data: { ...parsed.data, recordedById: session.userId } });
   revalidateBookingPaths(bookingId);
 }
+
+/** Corrects a recorded payment (amount, mode, received date, notes). */
+export async function updatePaymentAction(paymentId: string, formData: FormData): Promise<void> {
+  await requireStaffFeature("bookings");
+
+  const payment = await db.payment.findUnique({
+    where: { id: paymentId },
+    select: { bookingId: true, booking: { select: { deletedAt: true } } },
+  });
+  // An archived ("deleted") booking is read-only until restored.
+  if (!payment || payment.booking.deletedAt) return;
+
+  const parsed = addPaymentSchema.safeParse({
+    bookingId: payment.bookingId,
+    amount: formData.get("amount"),
+    mode: formData.get("mode"),
+    paidAt: formData.get("paidAt") || undefined,
+    notes: formData.get("notes") || undefined,
+  });
+  if (!parsed.success) return;
+
+  const { amount, mode, paidAt, notes } = parsed.data;
+  await db.payment.update({
+    where: { id: paymentId },
+    // Notes cleared in the form must clear the stored note, hence null.
+    data: { amount, mode, notes: notes ?? null, ...(paidAt ? { paidAt } : {}) },
+  });
+  revalidateBookingPaths(payment.bookingId);
+}

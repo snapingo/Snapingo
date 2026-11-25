@@ -112,9 +112,14 @@ describe("buildCustomItineraryHtml", () => {
       makeData({ showTravellerCount: false, priceLines: [{ label: "Adult", count: 2, rate: 25000 }] }),
       context
     );
-    expect(html).toContain("₹26,250");
-    expect(html).not.toContain("&times; 2");
+    // Only the total: no per-person rate, no head count, no Amount column.
+    expect(html).toContain("Total Price");
+    expect(html).toContain("₹63,000");
+    expect(html).not.toContain("₹26,250");
     expect(html).not.toContain("₹52,500");
+    expect(html).not.toContain("Rate / Person");
+    expect(html).not.toContain("per person");
+    expect(html).not.toContain("&times; 2");
     expect(html).not.toContain("2 Adults");
     expect(html).not.toContain("Child Ages");
   });

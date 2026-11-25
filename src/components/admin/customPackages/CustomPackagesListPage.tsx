@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { getSession } from "@/lib/dal";
 import { canEditCustomPackage } from "@/lib/customPackageAccess";
 import { formatRupees } from "@/lib/gst";
+import { packagePositions } from "@/lib/tripPackages";
 import DeleteButton from "@/components/admin/cms/DeleteButton";
 import { deleteCustomPackageAction, restoreCustomPackageAction } from "@/lib/actions/customPackages";
 import Pagination, { PAGE_SIZE } from "@/components/admin/Pagination";
@@ -66,6 +67,14 @@ export default async function CustomPackagesListPage({
       include: { createdBy: { select: { name: true } }, deletedBy: { select: { name: true } } },
     }),
   ]);
+
+  // "#2" beside a Trip ID that several packages share: each one's place among
+  // its trip's packages that still exist.
+  const siblings = await db.customPackage.findMany({
+    where: { tripId: { in: [...new Set(quotations.map((q) => q.tripId))] }, deletedAt: null },
+    select: { id: true, tripId: true, packageNumber: true },
+  });
+  const positions = packagePositions(siblings);
 
   return (
     <div>
@@ -132,6 +141,11 @@ export default async function CustomPackagesListPage({
                   >
                     {quotation.tripId}
                   </Link>
+                  {(positions.get(quotation.id) ?? 1) > 1 && (
+                    <span className="relative ml-2 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-bold text-brand-700">
+                      #{positions.get(quotation.id)}
+                    </span>
+                  )}
                 </td>
                 <td className="px-4 py-3">
                   <p className="font-semibold text-ink-900">{quotation.customerName}</p>

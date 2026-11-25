@@ -112,11 +112,11 @@ export default async function PackageDetailPage({
                   What&apos;s included
                 </h3>
                 <div className="mt-4 flex flex-wrap gap-3">
-                  {(pkg.inclusionDetails ?? []).map((inc) => {
+                  {(pkg.inclusionDetails ?? []).map((inc, idx) => {
                     const Icon = resolveInclusionIcon(inc.icon);
                     return (
                       <span
-                        key={inc.value}
+                        key={`${inc.value}-${idx}`}
                         className="flex items-center gap-2 rounded-full bg-ink-50 px-4 py-2 text-sm font-medium text-ink-700"
                       >
                         <Icon className="h-4 w-4 text-brand-600" />
@@ -141,8 +141,8 @@ export default async function PackageDetailPage({
                   Not included
                 </h2>
                 <ul className="mt-5 space-y-2.5">
-                  {pkg.exclusions.map((ex) => (
-                    <li key={ex} className="flex items-start gap-2.5 text-sm text-ink-900">
+                  {pkg.exclusions.map((ex, idx) => (
+                    <li key={`${ex}-${idx}`} className="flex items-start gap-2.5 text-sm text-ink-900">
                       <X className="mt-0.5 h-4 w-4 shrink-0 text-ink-300" />
                       {ex}
                     </li>

@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { MAX_PACKAGES_PER_TRIP, canAddPackage } from "@/lib/tripPackages";
 import { getSession } from "@/lib/dal";
 import { canAccessLead } from "@/lib/leads";
 import { canEditCustomPackage } from "@/lib/customPackageAccess";
@@ -73,6 +75,8 @@ export default async function CustomPackageFormPage({
   customPackageId: customPackageIdProp,
   leadId,
   editLeadId,
+  tripOfId,
+  tripMode,
 }: {
   isNew?: boolean;
   customPackageId?: string;
@@ -82,6 +86,10 @@ export default async function CustomPackageFormPage({
   // otherwise a new one pre-filled from the lead. Saving also updates the
   // lead's own details and returns to the lead.
   editLeadId?: string;
+  // "Add package": another package on this package's Trip ID. `tripMode`
+  // "copy" starts from its contents, anything else from the customer alone.
+  tripOfId?: string;
+  tripMode?: string;
 }) {
   const sourceLeadId = editLeadId ?? leadId;
   const [suggestions, inclusions, roomCategories, hotelCategories, gstPercent, lead] = await Promise.all([
@@ -107,6 +115,34 @@ export default async function CustomPackageFormPage({
   const quotation = customPackageId ? await loadQuotation(customPackageId) : null;
 
   if (customPackageId && !quotation) notFound();
+
+  // The package this one is being added alongside, and whether its trip has
+  // room for another.
+  const tripSource = tripOfId && isNew ? await loadQuotation(tripOfId) : null;
+  if (tripOfId && isNew && !tripSource) notFound();
+  const tripBase = session?.role === "ADMIN" ? "/admin" : "/staff";
+  if (tripSource) {
+    if (!canEditCustomPackage(session, tripSource.createdById)) {
+      redirect(`${tripBase}/custom-packages/${tripSource.id}`);
+    }
+    const live = await db.customPackage.count({ where: { tripId: tripSource.tripId, deletedAt: null } });
+    if (!canAddPackage(live)) {
+      return (
+        <div>
+          <h1 className="font-heading text-2xl font-bold text-ink-900">Add Package</h1>
+          <p className="mt-3 rounded-xl bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
+            Trip {tripSource.tripId} already has {MAX_PACKAGES_PER_TRIP} packages, the most one trip can hold.
+          </p>
+          <Link
+            href={`${tripBase}/custom-packages/${tripSource.id}`}
+            className="mt-4 inline-block text-sm font-semibold text-brand-600 hover:text-brand-700"
+          >
+            Back to the package
+          </Link>
+        </div>
+      );
+    }
+  }
   // Someone else's quotation is view-only: send them back to its detail page.
   if (quotation && !canEditCustomPackage(session, quotation.createdById)) {
     redirect(`${session?.role === "ADMIN" ? "/admin" : "/staff"}/custom-packages/${quotation.id}`);
@@ -124,13 +160,37 @@ export default async function CustomPackageFormPage({
 
   const heading = editLeadId
     ? `Edit Lead${lead?.name ? `: ${lead.name}` : ""}`
-    : isNew
-      ? "New Customized Package"
-      : `Edit ${quotation?.tripId}`;
+    : tripSource
+      ? `Add Package to ${tripSource.tripId}`
+      : isNew
+        ? "New Customized Package"
+        : `Edit ${quotation?.tripId}`;
+
+  // Starting values for an extra package on a trip: a copy of the source
+  // package's contents, or just the customer. Either way it is a new package
+  // (no id) on that trip, for the same customer and lead.
+  const mode = tripMode === "copy" ? "copy" : "blank";
+  const tripDefaults: CustomPackageDefaults | undefined = tripSource
+    ? mode === "copy"
+      ? {
+          ...(await defaultsFromQuotation(tripSource)),
+          id: undefined,
+          tripOfId: tripSource.id,
+          tripOfMode: mode,
+        }
+      : {
+          tripOfId: tripSource.id,
+          tripOfMode: mode,
+          leadId: tripSource.leadId ?? undefined,
+          customerName: tripSource.customerName,
+          customerPhone: tripSource.customerPhone ?? undefined,
+          customerEmail: tripSource.customerEmail ?? undefined,
+        }
+    : undefined;
 
   // A quotation nobody has signed yet (every new one, and older ones saved
   // before this existed) starts as prepared by whoever is signed in now.
-  const baseDefaults = quotationDefaults ?? (lead ? defaultsFromLead(lead) : undefined);
+  const baseDefaults = tripDefaults ?? quotationDefaults ?? (lead ? defaultsFromLead(lead) : undefined);
   const defaults = baseDefaults?.preparedByName
     ? baseDefaults
     : { ...baseDefaults, ...preparer };
@@ -146,6 +206,13 @@ export default async function CustomPackageFormPage({
             <h1 className="font-heading text-2xl font-bold text-ink-900">{heading}</h1>
             {editLeadId && quotation && (
               <p className="mt-1 font-mono text-sm font-semibold text-brand-600">{quotation.tripId}</p>
+            )}
+            {tripSource && (
+              <p className="mt-1 text-sm text-ink-500">
+                {mode === "copy"
+                  ? `Filled in from ${tripSource.destinationName} - change whatever differs.`
+                  : "A fresh package for the same customer."}
+              </p>
             )}
           </>
         }

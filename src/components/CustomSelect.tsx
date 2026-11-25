@@ -4,6 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, ChevronDown } from "lucide-react";
+import {
+  DRAFT_RESTORED_EVENT,
+  currentPageKey,
+  isPanelPath,
+  readPageDraft,
+  saveSelectValue,
+} from "@/lib/formDraft";
 
 export type SelectOption = {
   value: string;
@@ -73,10 +80,40 @@ export default function CustomSelect({
     setHighlightedIndex(-1);
   };
 
+  // In the admin/staff panels a dropdown that is part of a form remembers
+  // what was picked while the user is away on another screen (see
+  // FormDraftKeeper, which handles the plain fields). The key is the field's
+  // name plus its position among same-named fields on the page.
+  const hiddenRef = useRef<HTMLInputElement>(null);
+  const draftKey = () => {
+    const el = hiddenRef.current;
+    if (!name || !el || !isPanelPath(window.location.pathname) || el.closest("[data-no-draft]")) return null;
+    const same = Array.from(document.querySelectorAll(`input[type="hidden"][name="${CSS.escape(name)}"]`));
+    return `${name}#${same.indexOf(el)}`;
+  };
+
+  const restoredOnce = useRef(false);
+  useEffect(() => {
+    if (restoredOnce.current) return;
+    restoredOnce.current = true;
+    const key = draftKey();
+    if (!key) return;
+    const saved = readPageDraft(currentPageKey())?.selects[key];
+    if (saved !== undefined && saved !== value && options.some((o) => o.value === saved)) {
+      onChange(saved);
+      window.dispatchEvent(new Event(DRAFT_RESTORED_EVENT));
+    }
+    // Once, on mount: the saved pick replaces the starting value, and later
+    // changes are the user's own.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const selectOption = (index: number) => {
     const opt = options[index];
     if (!opt) return;
     onChange(opt.value);
+    const key = draftKey();
+    if (key) saveSelectValue(currentPageKey(), key, opt.value);
     closeList();
     buttonRef.current?.focus();
   };
@@ -155,7 +192,7 @@ export default function CustomSelect({
 
   return (
     <div ref={containerRef} className="relative">
-      {name && <input type="hidden" name={name} value={value} required={required} />}
+      {name && <input ref={hiddenRef} type="hidden" name={name} value={value} required={required} />}
       <button
         ref={buttonRef}
         type="button"

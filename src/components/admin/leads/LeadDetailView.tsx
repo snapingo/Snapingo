@@ -4,6 +4,7 @@ import { ArrowLeft, CalendarPlus, Download, FileText, Users } from "lucide-react
 import { db } from "@/lib/db";
 import { canUseStaffFeature, getSession } from "@/lib/dal";
 import { getActiveMasterList } from "@/lib/masterData";
+import { packagePositions } from "@/lib/tripPackages";
 import {
   noteStatusLabels,
   noteStatusTextStyles,
@@ -47,7 +48,7 @@ export default async function LeadDetailView({ basePath, leadId }: { basePath: s
         customPackages: {
           where: { deletedAt: null },
           orderBy: { createdAt: "desc" },
-          select: { id: true, tripId: true, destinationName: true, totalAmount: true, createdAt: true },
+          select: { id: true, tripId: true, packageNumber: true, destinationName: true, totalAmount: true, createdAt: true },
         },
       },
     }),
@@ -64,6 +65,10 @@ export default async function LeadDetailView({ basePath, leadId }: { basePath: s
   // else's by URL is the same 404 as a lead that doesn't exist.
   const isAdmin = session?.role === "ADMIN";
   if (!lead || (!isAdmin && lead.assignedToId !== session?.userId)) notFound();
+
+  // Each quotation's place among its trip's packages (every package added to
+  // a trip stays on the same lead, so the lead's own list is the whole trip).
+  const packagePositionById = packagePositions(lead.customPackages);
 
   // Whoever owns the lead. Older leads may still be assigned to a team (role)
   // from before assignment moved to individual people.
@@ -183,6 +188,11 @@ export default async function LeadDetailView({ basePath, leadId }: { basePath: s
                     className="whitespace-nowrap font-mono text-xs font-semibold text-brand-600 hover:text-brand-700"
                   >
                     {quotation.tripId}
+                    {(packagePositionById.get(quotation.id) ?? 1) > 1 && (
+                      <span className="ml-2 rounded-full bg-brand-50 px-2 py-0.5 font-sans text-[11px] font-bold text-brand-700">
+                        Package {packagePositionById.get(quotation.id)}
+                      </span>
+                    )}
                   </Link>
                   <p className="text-xs text-ink-500">
                     {quotation.destinationName} · ₹{quotation.totalAmount.toLocaleString("en-IN")} ·{" "}

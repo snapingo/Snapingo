@@ -37,6 +37,7 @@ const FORM_ID = "custom-package-form";
 const inputClass =
   "w-full rounded-xl border border-ink-200 bg-white px-4 py-2.5 text-sm text-ink-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100";
 const labelClass = "mb-1.5 block text-xs font-bold uppercase tracking-wide text-ink-900";
+const readOnlyClass = "cursor-not-allowed bg-ink-50 text-ink-500";
 // Shared by the price table's header and rows so the columns line up.
 const PRICE_ROW_GRID = "grid grid-cols-[minmax(0,1fr)_96px_150px_120px_32px] items-center gap-3";
 
@@ -77,6 +78,12 @@ const isCustomType = (label: string) => Boolean(label) && !travellerTypes.includ
 
 export type CustomPackageDefaults = {
   id?: string;
+  // Set for a new package added to an existing package's Trip ID: the
+  // customer's details are then fixed (it is the same customer).
+  tripOfId?: string;
+  // "copy" starts from the source package's contents, "blank" from nothing
+  // but the customer; only used to keep their drafts apart.
+  tripOfMode?: string;
   customerName?: string;
   customerPhone?: string;
   customerEmail?: string;
@@ -178,6 +185,7 @@ function formToDefaults(form: HTMLFormElement): CustomPackageDefaults {
 
   return {
     id: str("id"),
+    tripOfId: str("tripOfId"),
     leadId: str("leadId"),
     customerName: str("customerName"),
     customerPhone: str("customerPhone"),
@@ -223,7 +231,12 @@ function formToDefaults(form: HTMLFormElement): CustomPackageDefaults {
  */
 export default function CustomPackageForm(props: FormProps) {
   const leadSuffix = props.defaults?.leadId ? `:lead-${props.defaults.leadId}` : "";
-  const draftKey = `snapingo:custom-package-draft:${props.isNew ? `new${leadSuffix}` : props.defaults?.id}`;
+  // An extra package on a trip keeps its own draft per source package and per
+  // way of starting (copy or blank), apart from every other new package.
+  const tripSuffix = props.defaults?.tripOfId
+    ? `:trip-${props.defaults.tripOfId}-${props.defaults.tripOfMode ?? "blank"}`
+    : "";
+  const draftKey = `snapingo:custom-package-draft:${props.isNew ? `new${leadSuffix}${tripSuffix}` : props.defaults?.id}`;
 
   // False on the server and during hydration, true right after: the server
   // has no localStorage, so a draft can only be applied once in the browser
@@ -446,27 +459,20 @@ function CustomPackageFormBody({
   const [nights, setNights] = useState(String(defaults?.durationNights ?? ""));
   const [days, setDays] = useState(String(defaults?.durationDays ?? ""));
 
-  // Picking both travel dates fills Nights/Days (a 5 -> 10 Oct trip is
-  // 5 nights / 6 days). Both dropdowns stay editable afterwards for the odd
-  // trip that doesn't fit that shape; once staff set either by hand, later
-  // date changes stop overwriting it. Saved quotations start as manual so
-  // re-opening one never resets its duration.
-  const [durationManual, setDurationManual] = useState(!!defaults?.id || restoredAt !== undefined || startDirty === true);
-  const changeNights = (v: string) => {
-    setDurationManual(true);
-    setNights(v);
-  };
-  const changeDays = (v: string) => {
-    setDurationManual(true);
-    setDays(v);
-  };
+  // Picking or changing the travel dates always refills Nights/Days (a
+  // 5 -> 10 Oct trip is 5 nights / 6 days). Both dropdowns stay editable for
+  // the odd trip that doesn't fit that shape, but the next date change
+  // recalculates them from the dates again. Merely re-opening a saved
+  // quotation changes nothing - only editing a date does.
+  const changeNights = (v: string) => setNights(v);
+  const changeDays = (v: string) => setDays(v);
   const onDatesChange = (start: string, end: string) => {
     // A new start date re-dates the itinerary: Day 1 on it, each day after
     // one date later. Changing only the end date leaves the days alone.
     if (start && start !== startDate) setDayRows((rows) => datesFromStart(rows, start));
     setStartDate(start);
     setEndDate(end);
-    if (!start || !end || durationManual) return;
+    if (!start || !end) return;
     const diff = Math.round((Date.parse(end) - Date.parse(start)) / 86_400_000);
     if (diff < 0 || diff > MAX_DURATION_NIGHTS) return;
     setNights(String(diff));
@@ -490,6 +496,8 @@ function CustomPackageFormBody({
   // The package price is the breakup's sum - the same rule the server applies.
   const gst = priceLinesGst(parsePriceLines(priceRows), gstPercent);
 
+  const sameCustomer = isNew && Boolean(defaults?.tripOfId);
+
   const roomCategoryIsOther = roomCategories.find((c) => c.value === roomCategory)?.freeText ?? false;
 
   const toggleInclusion = (value: string) => {
@@ -507,6 +515,8 @@ function CustomPackageFormBody({
   return (
     <form
       id={FORM_ID}
+      // Keeps its own, fuller draft (see above); the panel-wide one stays out.
+      data-no-draft
       ref={formRef}
       onSubmit={onSubmit}
       onInput={markDirty}
@@ -535,22 +545,30 @@ function CustomPackageFormBody({
         </div>
       )}
       {!isNew && <input type="hidden" name="id" value={defaults?.id ?? ""} />}
+      {isNew && defaults?.tripOfId && <input type="hidden" name="tripOfId" value={defaults.tripOfId} />}
       {defaults?.leadId && <input type="hidden" name="leadId" value={defaults.leadId} />}
       {returnToLead && <input type="hidden" name="returnTo" value="lead" />}
 
       <Section title="Customer">
+        {/* Another package on the same Trip ID is for the same customer, so
+            their details are shown but not editable here. */}
+        {isNew && defaults?.tripOfId && (
+          <p className="mb-4 text-sm text-ink-500">
+            This package is added to the same trip, so the customer&apos;s details stay the same.
+          </p>
+        )}
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div>
             <label className={labelClass} htmlFor="customerName">Name</label>
-            <input id="customerName" name="customerName" required defaultValue={defaults?.customerName} className={inputClass} />
+            <input id="customerName" name="customerName" required readOnly={sameCustomer} defaultValue={defaults?.customerName} className={`${inputClass} ${sameCustomer ? readOnlyClass : ""}`} />
           </div>
           <div>
             <label className={labelClass} htmlFor="customerPhone">Phone</label>
-            <input id="customerPhone" name="customerPhone" defaultValue={defaults?.customerPhone} className={inputClass} />
+            <input id="customerPhone" name="customerPhone" readOnly={sameCustomer} defaultValue={defaults?.customerPhone} className={`${inputClass} ${sameCustomer ? readOnlyClass : ""}`} />
           </div>
           <div>
             <label className={labelClass} htmlFor="customerEmail">Email</label>
-            <input id="customerEmail" name="customerEmail" type="email" defaultValue={defaults?.customerEmail} className={inputClass} />
+            <input id="customerEmail" name="customerEmail" type="email" readOnly={sameCustomer} defaultValue={defaults?.customerEmail} className={`${inputClass} ${sameCustomer ? readOnlyClass : ""}`} />
           </div>
         </div>
       </Section>

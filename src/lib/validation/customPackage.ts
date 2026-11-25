@@ -35,6 +35,9 @@ const optionalText = (max: number) => z.string().trim().max(max).optional();
 
 export const customPackageSchema = z.object({
   id: z.string().trim().max(60).optional(),
+  // Set when this new package is another package on an existing package's
+  // Trip ID (the "Add package" flow) rather than a trip of its own.
+  tripOfId: z.string().trim().max(60).optional(),
 
   customerName: z.string().trim().min(1, "Customer name is required.").max(200),
   customerPhone: optionalText(40),
@@ -72,9 +75,10 @@ export const customPackageSchema = z.object({
   hotelCategory: optionalText(120),
 
   inclusions: z.array(z.string().max(120)),
-  customInclusions: z.string().transform(linesToArray).pipe(z.array(z.string().max(200)).max(20)),
+  // No line-count or length cap: staff can write as much as they need.
+  customInclusions: z.string().transform(linesToArray),
   // Extra exclusions, one per line - printed after the automatic ones.
-  exclusions: z.string().optional().transform(linesToArray).pipe(z.array(z.string().max(200)).max(20)),
+  exclusions: z.string().optional().transform(linesToArray),
 
   vehicleName: optionalText(200),
 

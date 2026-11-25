@@ -56,11 +56,26 @@ const loaders: Record<SuggestionField, () => Promise<(string | null)[]>> = {
   },
 
   destinationName: async () => {
-    const [destinations, quotations] = await Promise.all([
+    const [destinations, quotations, bookings, leads] = await Promise.all([
       db.destination.findMany({ select: { name: true }, distinct: ["name"] }),
       db.customPackage.findMany({ select: { destinationName: true }, distinct: ["destinationName"] }),
+      db.booking.findMany({
+        where: { destinationName: { not: null } },
+        select: { destinationName: true },
+        distinct: ["destinationName"],
+      }),
+      db.lead.findMany({
+        where: { destinationName: { not: null } },
+        select: { destinationName: true },
+        distinct: ["destinationName"],
+      }),
     ]);
-    return [...destinations.map((d) => d.name), ...quotations.map((q) => q.destinationName)];
+    return [
+      ...destinations.map((d) => d.name),
+      ...quotations.map((q) => q.destinationName),
+      ...bookings.map((b) => b.destinationName),
+      ...leads.map((l) => l.destinationName),
+    ];
   },
 
   hotelName: async () => {

@@ -53,11 +53,11 @@ export default function PackageCard({ pkg }: { pkg: TourPackage }) {
         <p className="mt-1 text-sm text-ink-900 3xl:text-base">{pkg.duration}</p>
 
         <div className="mt-4 flex flex-wrap gap-2">
-          {(pkg.inclusionDetails ?? []).map((inc) => {
+          {(pkg.inclusionDetails ?? []).map((inc, idx) => {
             const Icon = resolveInclusionIcon(inc.icon);
             return (
               <span
-                key={inc.value}
+                key={`${inc.value}-${idx}`}
                 className="grid h-8 w-8 place-items-center rounded-full bg-ink-50 text-ink-900"
                 title={inc.label}
               >

@@ -3,7 +3,10 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, Pencil, Receipt } from "lucide-react";
 import { db } from "@/lib/db";
 import DeleteBookingButton from "@/components/admin/bookings/DeleteBookingButton";
-import { addPaymentAction, restoreBookingAction } from "@/lib/actions/bookings";
+import { addPaymentAction, restoreBookingAction, updatePaymentAction } from "@/lib/actions/bookings";
+import PaymentItem from "@/components/admin/bookings/PaymentItem";
+import AddPaymentToggle from "@/components/admin/bookings/AddPaymentToggle";
+import { HideWhileEditing, PaymentEditProvider } from "@/components/admin/bookings/PaymentEditContext";
 import { getSession } from "@/lib/dal";
 import RestoreButton from "@/components/admin/RestoreButton";
 import { formatBalance } from "@/lib/money";
@@ -14,6 +17,12 @@ import FormSelect from "@/components/admin/FormSelect";
 const PAYMENT_MODES = ["UPI", "Cash", "Bank Transfer", "Card", "Cheque"];
 
 const fmtDate = (d: Date) => d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+
+// Payment dates are calendar days entered by staff: always shown and edited in
+// IST so a day never shifts depending on the server's timezone.
+const fmtPayDate = (d: Date) =>
+  d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
+const payDateInput = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 
 export default async function BookingDetailView({ bookingId, basePath = "/admin" }: { bookingId: string; basePath?: string }) {
   const [booking, session] = await Promise.all([
@@ -144,26 +153,38 @@ export default async function BookingDetailView({ bookingId, basePath = "/admin"
           </div>
         </div>
 
+        <PaymentEditProvider>
         <div className="rounded-2xl border border-ink-100 bg-white p-6 shadow-sm">
           <h2 className="font-heading text-base font-bold text-ink-900">Payments</h2>
           <div className="mt-4 space-y-3">
             {booking.payments.map((p) => (
-              <div key={p.id} className="rounded-xl bg-ink-50/60 p-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-ink-900">₹{p.amount.toLocaleString("en-IN")}</p>
-                  <p className="text-xs text-ink-500">{fmtDate(p.paidAt)}</p>
-                </div>
-                <p className="mt-0.5 text-xs text-ink-500">
-                  {p.mode} · recorded by {p.recordedBy.name}
-                </p>
-                {p.notes && <p className="mt-1 text-xs text-ink-700">{p.notes}</p>}
-              </div>
+              <PaymentItem
+                key={p.id}
+                amount={p.amount}
+                mode={p.mode}
+                notes={p.notes}
+                paidAtLabel={fmtPayDate(p.paidAt)}
+                paidAtInput={payDateInput(p.paidAt)}
+                recordedBy={p.recordedBy.name}
+                modes={PAYMENT_MODES}
+                canEdit={!archived}
+                action={updatePaymentAction.bind(null, p.id)}
+              />
             ))}
             {booking.payments.length === 0 && <p className="text-sm text-ink-500">No payments recorded yet.</p>}
           </div>
 
+          {/* Nothing left to collect: the form hides behind "Add payment" (see
+              AddPaymentToggle). A wrong amount is fixed with the pencil on
+              the payment itself. */}
           {/* An archived booking is read-only until it's restored. */}
           {!archived && (
+          <HideWhileEditing>
+          <AddPaymentToggle
+            settled={balance <= 0 && booking.payments.length > 0}
+            paymentCount={booking.payments.length}
+            note={balance === 0 ? "Fully paid - no balance due." : "Fully paid (received is more than the total)."}
+          >
           <form action={addPaymentAction.bind(null, booking.id)} className="mt-4 space-y-2.5 border-t border-ink-100 pt-4">
             <div className="grid grid-cols-2 gap-2.5">
               <input
@@ -175,6 +196,19 @@ export default async function BookingDetailView({ bookingId, basePath = "/admin"
                 className="rounded-xl border border-ink-200 bg-white px-3 py-2.5 text-sm text-ink-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
               />
               <FormSelect name="mode" options={PAYMENT_MODES} defaultValue="UPI" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-ink-500" htmlFor="paidAt">
+                Payment received date
+              </label>
+              <input
+                id="paidAt"
+                name="paidAt"
+                type="date"
+                required
+                defaultValue={payDateInput(new Date())}
+                className="w-full rounded-xl border border-ink-200 bg-white px-3 py-2.5 text-sm text-ink-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+              />
             </div>
             <input
               name="notes"
@@ -188,8 +222,11 @@ export default async function BookingDetailView({ bookingId, basePath = "/admin"
               Record Payment
             </button>
           </form>
+          </AddPaymentToggle>
+          </HideWhileEditing>
           )}
         </div>
+        </PaymentEditProvider>
       </div>
 
       <div className="mt-6">

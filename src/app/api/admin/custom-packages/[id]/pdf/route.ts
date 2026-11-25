@@ -22,8 +22,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const pdf = await renderPdfFromHtml(html);
 
   // Filename is the Trip ID so a staff member sending three quotations over
-  // WhatsApp can tell them apart in their downloads folder.
-  const filename = `${loaded.data.tripId}-${loaded.data.customerName.replace(/[^a-zA-Z0-9]+/g, "-")}.pdf`;
+  // WhatsApp can tell them apart in their downloads folder. A trip can hold
+  // several packages, so the destination keeps those apart too.
+  const slug = (text: string) => text.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const filename = `${loaded.data.tripId}-${slug(loaded.data.destinationName)}-${slug(loaded.data.customerName)}.pdf`;
 
   return new NextResponse(pdf as BodyInit, {
     headers: {
